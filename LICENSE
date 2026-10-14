@@ -19,9 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-The bundled QR encoder in web/vendor/qrcode.js is copyright (c) 2009 Kazuhiko Arase and is
-distributed under the same MIT licence; its licence header is retained in the file. The word
-"QR Code" is a registered trademark of DENSO WAVE INCORPORATED.

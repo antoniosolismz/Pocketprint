@@ -259,5 +259,6 @@ open it in Wireshark, and diff it against `cli.py dry-run`.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). The bundled QR encoder is Kazuhiko Arase's MIT-licensed
-`qrcode-generator`, vendored unmodified with its licence header intact.
+MIT — see [LICENSE](LICENSE). One dependency is vendored rather than fetched at runtime: the QR
+encoder, Kazuhiko Arase's MIT-licensed `qrcode-generator`, unmodified with its licence header
+intact. Details in [THIRD-PARTY.md](THIRD-PARTY.md).
