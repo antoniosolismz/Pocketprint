@@ -4,9 +4,9 @@
 #   ./deploy.sh            push web/ and verify over LAN + public HTTPS
 #   ./deploy.sh --dry-run  show what would be pushed, touch nothing
 #
-# The site is three static files behind nginx. There is no build step and no
-# server-side anything, so "deploy" is: copy, then prove the bytes match on both
-# paths (LAN origin and the Cloudflare tunnel).
+# The site is a directory of static files behind nginx. There is no build step and no
+# server-side anything, so "deploy" is: copy, then prove the bytes match on both paths
+# (LAN origin and the Cloudflare tunnel).
 set -euo pipefail
 
 PROXMOX_HOST="root@192.168.0.2"
@@ -15,34 +15,49 @@ VMID=136
 ORIGIN_IP="192.168.0.221"
 PUBLIC_URL="https://print.otelo2.com"
 WEB_DIR="$(cd "$(dirname "$0")" && pwd)/web"
-FILES=(index.html funnyprint.js)
 REMOTE_TMP="/root/pocketprint-web.tar.gz"
+
+FILES=(
+  index.html
+  funnyprint.js
+  codes.js
+  label.js
+  sw.js
+  manifest.webmanifest
+  vendor/qrcode.js
+  vendor/code128-table.js
+  icons/icon-192.png
+  icons/icon-512.png
+  icons/icon-maskable-512.png
+  icons/apple-touch-icon-180.png
+)
 
 DRY_RUN=0
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
 
-echo "== packaging ${FILES[*]} =="
+echo "== packaging ${#FILES[@]} files =="
 staging="$(mktemp -d)"
 trap 'rm -rf "$staging"' EXIT
 for f in "${FILES[@]}"; do
-  cp "$WEB_DIR/$f" "$staging/$f"
+  install -D -m 644 "$WEB_DIR/$f" "$staging/$f"
 done
 
 # Cloudflare caches .js at its edge on its own TTL and cannot be purged with this token, so
-# stamp the script URL with the file's hash. A changed file means a changed URL, which is
+# stamp the script URL with the bundle hash. A changed file means a changed URL, which is
 # the only cache-busting that also survives the edge.
-build="$(sha256sum "$staging/funnyprint.js" | cut -c1-12)"
-sed -i "s#funnyprint\.js?v=[^\"']*#funnyprint.js?v=${build}#" "$staging/index.html" 2>/dev/null \
-  || sed -i '' "s#funnyprint\.js?v=[^\"']*#funnyprint.js?v=${build}#" "$staging/index.html"
+build="$(cat "$staging/funnyprint.js" "$staging/codes.js" "$staging/label.js" | sha256sum | cut -c1-12)"
+sed -i "s#funnyprint\.js?v=[^\"']*#funnyprint.js?v=${build}#" "$staging/index.html"
+# and give the service worker a fresh cache bucket per deploy, so old ones get dropped
+sed -i "s/pocketprint-__BUILD__/pocketprint-${build}/" "$staging/sw.js"
 echo "   build stamp: ${build}"
-grep -o 'funnyprint\.js?v=[a-f0-9]*' "$staging/index.html" | sed 's/^/   /'
+grep -o "funnyprint\.js?v=[a-f0-9]*" "$staging/index.html" | sed 's/^/   /'
+grep -o "pocketprint-[a-f0-9]*" "$staging/sw.js" | sed 's/^/   sw cache: /'
 
 tar czf "$staging/pocketprint-web.tar.gz" -C "$staging" "${FILES[@]}"
 echo "   $(du -h "$staging/pocketprint-web.tar.gz" | cut -f1) -> $REMOTE_TMP"
 
-sha_local=$(cd "$staging" && sha256sum "${FILES[@]}")
 echo "== local digests =="
-echo "$sha_local" | sed 's/^/   /'
+(cd "$staging" && sha256sum "${FILES[@]}") | sed 's/^/   /'
 
 if [[ "$DRY_RUN" == "1" ]]; then
   echo "dry run: nothing pushed"
@@ -60,16 +75,21 @@ ssh -i "$SSH_KEY" "$PROXMOX_HOST" "set -e
   rm -f $REMOTE_TMP"
 
 fail=0
-echo "== verify on the LAN origin =="
-for f in "${FILES[@]}"; do
-  remote=$(curl -sS --max-time 15 "http://$ORIGIN_IP/$f" | sha256sum | cut -d' ' -f1)
-  local_sum=$(cd "$staging" && sha256sum "$f" | cut -d' ' -f1)
-  if [[ "$remote" == "$local_sum" ]]; then
-    echo "   OK   $f  ${remote:0:16}"
-  else
-    echo "   FAIL $f  served=${remote:0:16} expected=${local_sum:0:16}"; fail=1
-  fi
-done
+verify_against() {
+  local base="$1" label="$2"
+  echo "== verify on $label =="
+  for f in "${FILES[@]}"; do
+    remote=$(curl -sS --max-time 25 "$base/$f" | sha256sum | cut -d' ' -f1)
+    local_sum=$(cd "$staging" && sha256sum "$f" | cut -d' ' -f1)
+    if [[ "$remote" == "$local_sum" ]]; then
+      echo "   OK   $f  ${remote:0:16}"
+    else
+      echo "   FAIL $f  served=${remote:0:16} expected=${local_sum:0:16}"; fail=1
+    fi
+  done
+}
+
+verify_against "http://$ORIGIN_IP" "the LAN origin"
 
 echo "== verify through the Cloudflare tunnel (may take a few seconds to propagate) =="
 for attempt in 1 2 3 4 5; do

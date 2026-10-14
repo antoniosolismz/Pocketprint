@@ -515,20 +515,44 @@
       await this.transport.write(frame);
     }
 
+    /* Progress for the UI: a 341-packet photo takes ~14 s and silence is unnerving.
+     * ETA is measured from this job's own pace, so a slowdown from holds shows up. */
+    _report(phase, extra) {
+      if (typeof this.onProgress !== 'function') return;
+      const sent = this.session.cursor;
+      const total = this.session.totalPkg;
+      const elapsed = Date.now() - (this._jobStart || Date.now());
+      const per = sent ? elapsed / sent : 0;
+      this.onProgress(Object.assign({
+        phase,
+        sent,
+        total,
+        percent: total ? Math.min(100, Math.round((sent / total) * 100)) : 0,
+        elapsedMs: elapsed,
+        etaMs: sent && sent < total ? Math.round(per * (total - sent)) : 0,
+        pacingMs: this.session.interPacketMs,
+        hold: this.session.hold,
+      }, extra || {}));
+    }
+
     /* Open the job, stream the packets, close it. The printer owns flow control
      * (0x05 rewind, 0x07 cooldown, 0x08 hold) and tells us when it is finished. */
     async print(raster, opts) {
       const o = opts || {};
       this.printDone = false;
       this.streaming = true;
+      this._jobStart = Date.now();
       try {
         for (const frame of this.session.startJob(raster, o)) await this._write(frame);
         for (const line of this.session.log.splice(0)) this.log(line);
+        this._report('start');
 
         const deadline = Date.now() + (o.timeoutMs || JOB_TIMEOUT_MS);
+        let tick = 0;
         while (!this.session.finished && !this.session.jobDone) {
           if (Date.now() > deadline) {
             this.log(`job timed out at packet ${this.session.cursor}/${this.session.totalPkg}`);
+            this._report('timeout');
             break;
           }
           const frame = this.session.nextStreamFrame(Date.now());
@@ -537,12 +561,16 @@
             continue;
           }
           await this._write(frame);
+          if ((tick++ % 4) === 0) this._report('sending');
           if (this.session.cursor < this.session.totalPkg) await sleep(this.session.interPacketMs);
         }
         if (this.session.finished) {
           for (const frame of this.session.finishFrames()) await this._write(frame);
           this.printDone = true;
           this.log('job closed');
+          this._report('done');
+        } else {
+          this._report('failed');
         }
       } finally {
         this.streaming = false;
@@ -663,6 +691,124 @@
     return bits;
   }
 
+  /* Atkinson: like Floyd-Steinberg but only 6/8 of the error is pushed on, which keeps
+   * highlights and shadows clean instead of smearing them into mush. On thermal paper it
+   * usually reads crisper than Floyd-Steinberg, at the cost of some tonal range. */
+  const ATKINSON_KERNEL = [[1, 0], [2, 0], [-1, 1], [0, 1], [1, 1], [0, 2]];
+
+  function atkinson(pixels, w, h, threshold) {
+    const buf = Uint8Array.from(pixels);
+    const bits = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const old = buf[i];
+        const next = old < threshold ? 0 : 255;
+        bits[i] = next === 0 ? 1 : 0;
+        const err = (old - next) / 8;
+        for (const [dx, dy] of ATKINSON_KERNEL) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || nx >= w || ny >= h) continue;
+          const j = ny * w + nx;
+          buf[j] = Math.max(0, Math.min(255, buf[j] + Math.round(err)));
+        }
+      }
+    }
+    return bits;
+  }
+
+  /* Ordered (Bayer) dithering: a fixed threshold tile, so the pattern is regular and
+   * stable. Better than error diffusion on flat areas and text, worse on photographs. */
+  const BAYER_8 = [
+     0, 32,  8, 40,  2, 34, 10, 42,
+    48, 16, 56, 24, 50, 18, 58, 26,
+    12, 44,  4, 36, 14, 46,  6, 38,
+    60, 28, 52, 20, 62, 30, 54, 22,
+     3, 35, 11, 43,  1, 33,  9, 41,
+    51, 19, 59, 27, 49, 17, 57, 25,
+    15, 47,  7, 39, 13, 45,  5, 37,
+    63, 31, 55, 23, 61, 29, 53, 21,
+  ];
+
+  function bayer(pixels, w, h, threshold) {
+    const bits = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        /* the tile turns the plain threshold into 65 levels between 0 and 255 */
+        const bias = (BAYER_8[(y % 8) * 8 + (x % 8)] + 0.5) * (255 / 64) - 127.5;
+        bits[i] = pixels[i] + bias < threshold ? 1 : 0;
+      }
+    }
+    return bits;
+  }
+
+  /* Unsharp mask: 3x3 box blur, then push the difference back. Rescues small text in a
+   * photo, which is the single most common thing a phone snap of a document gets wrong. */
+  function unsharp(pixels, w, h, amount) {
+    const a = (amount === undefined ? 50 : amount) / 100;
+    if (!a) return Uint8Array.from(pixels);
+    const out = Uint8Array.from(pixels);
+    const src = Uint8Array.from(pixels);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let sum = 0, n = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          const ny = y + dy;
+          if (ny < 0 || ny >= h) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx;
+            if (nx < 0 || nx >= w) continue;
+            sum += src[ny * w + nx];
+            n++;
+          }
+        }
+        const blurred = sum / n;
+        const v = src[y * w + x] + a * (src[y * w + x] - blurred);
+        out[y * w + x] = v < 0 ? 0 : v > 255 ? 255 : Math.round(v);
+      }
+    }
+    return out;
+  }
+
+  /* Rotate a luminance plane by quarter turns. Nothing here depends on canvas, so the CLI
+   * and the tests can use the same code the page does. */
+  function rotate(pixels, w, h, quarterTurns) {
+    const turns = ((quarterTurns % 4) + 4) % 4;
+    if (turns === 0) return { pixels: Uint8Array.from(pixels), w, h };
+    const swap = turns === 1 || turns === 3;
+    const nw = swap ? h : w;
+    const nh = swap ? w : h;
+    const out = new Uint8Array(nw * nh);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let nx, ny;
+        if (turns === 1) { nx = h - 1 - y; ny = x; }
+        else if (turns === 2) { nx = w - 1 - x; ny = h - 1 - y; }
+        else { nx = y; ny = w - 1 - x; }
+        out[ny * nw + nx] = pixels[y * w + x];
+      }
+    }
+    return { pixels: out, w: nw, h: nh };
+  }
+
+  const DITHER_MODES = ['floyd', 'atkinson', 'bayer', 'none'];
+
+  /* One entry point for every halftone choice, so the UI, the CLI and the tests cannot
+   * drift apart. `dither: false` is kept for the older callers. */
+  function ditherBits(pixels, w, h, opts) {
+    const o = opts || {};
+    const mode = o.mode || (o.dither === false ? 'none' : 'floyd');
+    const t = o.threshold === undefined ? 128 : o.threshold;
+    switch (mode) {
+      case 'atkinson': return atkinson(pixels, w, h, t);
+      case 'bayer': return bayer(pixels, w, h, t);
+      case 'none': return thresholdBits(pixels, w, h, t);
+      case 'floyd':
+      default: return floydSteinberg(pixels, w, h, t);
+    }
+  }
+
   /* MSB-first, packed continuously across the image (no per-row padding), matching
    * the vendor's ImageUtil.booleanArrayToBinaryBuffer; 1 = black. */
   function packBits(bits) {
@@ -675,9 +821,21 @@
 
   function rasterize(pixels, w, h, opts) {
     const o = Object.assign({ width: w, threshold: 128, dither: true }, opts || {});
-    const bits = o.dither ? floydSteinberg(pixels, w, h, o.threshold)
-                          : thresholdBits(pixels, w, h, o.threshold);
+    const bits = ditherBits(pixels, w, h, { mode: o.mode, dither: o.dither, threshold: o.threshold });
     return packBits(bits);
+  }
+
+  /* The whole still-image pipeline in one place — rotate, tone, sharpen, halftone — so the
+   * page, the CLI and the tests cannot end up with three different renderings. */
+  function processImage(pixels, w, h, opts) {
+    const o = opts || {};
+    const turned = o.rotate ? rotate(pixels, w, h, o.rotate)
+                            : { pixels: Uint8Array.from(pixels), w, h };
+    let plane = applyTone(turned.pixels, o);
+    if (o.sharpen) plane = unsharp(plane, turned.w, turned.h, o.sharpen);
+    const bits = ditherBits(plane, turned.w, turned.h,
+      { mode: o.ditherMode, dither: o.dither, threshold: o.threshold });
+    return { bits, w: turned.w, h: turned.h };
   }
 
   return {
@@ -686,6 +844,7 @@
     crc16Xmodem, deriveCrcs, hexToBytes, bytesToHex,
     frames, alignRaster, parseNotification,
     PrinterSession, PrinterLink, BleTransport, bleAvailable,
-    floydSteinberg, thresholdBits, packBits, rasterize, wrapText, applyTone
+    floydSteinberg, thresholdBits, packBits, rasterize, wrapText, applyTone,
+    atkinson, bayer, unsharp, rotate, ditherBits, processImage, DITHER_MODES, BAYER_8
   };
 });
