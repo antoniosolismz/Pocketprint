@@ -123,7 +123,7 @@ check('40 mm round-trips', Math.abs(Label.dotsToMm(Label.MM(40)) - 40) < 0.1,
 
 /* --------------------------------------------------------- label planner */
 console.log('\n== label planning ==');
-const plan = Label.planLabel({ title: 'Caja 07', subtitle: 'Ferretería', code: { kind: 'qr', text: 'https://otelo2.com' } });
+const plan = Label.planLabel({ title: 'Caja 07', subtitle: 'Ferretería', code: { kind: 'qr', text: 'https://antoniosolismz.com' } });
 check('a text+QR label has both blocks',
   plan.blocks.map((b) => b.kind).join(',') === 'text,qr', plan.blocks.map((b) => b.kind).join(','));
 check('no warnings on a normal label', plan.warnings.length === 0, JSON.stringify(plan.warnings));
@@ -225,8 +225,8 @@ check('labels further down the sheet get correspondingly lower text', (() => {
 
 console.log('\n== absolute placement: codes and borders ==');
 const withQr = Label.planSheet([
-  { title: 'a', code: { kind: 'qr', text: 'https://otelo2.com' } },
-  { title: 'b', code: { kind: 'qr', text: 'https://otelo2.com' } },
+  { title: 'a', code: { kind: 'qr', text: 'https://antoniosolismz.com' } },
+  { title: 'b', code: { kind: 'qr', text: 'https://antoniosolismz.com' } },
 ]);
 const qrLaid = withQr.labels.map((l) => Label.absoluteLayout(l));
 check('each QR is placed inside its own label', qrLaid.every((p) =>

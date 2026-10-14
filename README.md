@@ -26,7 +26,7 @@ tools/               generators for the vendored table and the icons, plus a che
 
 ## The app (recommended)
 
-**Live at https://print.otelo2.com** — open it in **Chrome or Edge** (Android, or any
+**Live at https://print.antoniosolismz.com** — open it in **Chrome or Edge** (Android, or any
 Chromium desktop; Firefox has no Web Bluetooth). It installs to the home screen as a real
 app and then runs with no network at all.
 
@@ -77,7 +77,7 @@ Web Bluetooth needs a secure origin from a phone, which is why it is served over
 |---|---|
 | Runtime | a Debian container on a Proxmox host — 1 core, 256 MB |
 | Web server | nginx serving `/var/www/pocketprint` as static files |
-| Public name | `print.otelo2.com`, published through a Cloudflare tunnel; no inbound ports open |
+| Public name | `print.antoniosolismz.com`, published through a Cloudflare tunnel; no inbound ports open |
 | Monitoring | the container's agent reports to a Wazuh manager; an uptime script checks both the public name and the LAN origin |
 | Deploy | `./deploy.sh` — packages `web/`, pushes, then compares sha256 on the LAN origin **and** through the tunnel |
 

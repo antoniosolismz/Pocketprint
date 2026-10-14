@@ -1,5 +1,5 @@
 Pocket Print — second hardware session, 2026-10-14
-Printer: LX-D02, MAC `a2ff00…` (redacted), host: Chrome on Android via https://print.otelo2.com
+Printer: LX-D02, MAC `a2ff00…` (redacted), host: Chrome on Android via the public name
 
 This run was the verification pass for the previous commit's fixes. Both held:
 

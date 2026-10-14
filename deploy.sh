@@ -26,6 +26,9 @@ SSH_KEY="${POCKETPRINT_SSH_KEY:-}"
 VMID="${POCKETPRINT_VMID:-}"
 ORIGIN_IP="${POCKETPRINT_ORIGIN_IP:-}"
 PUBLIC_URL="${POCKETPRINT_PUBLIC_URL:-}"
+# optional: another public name that reaches the same service (a private alias, say). Verified
+# alongside the published one so it cannot quietly rot.
+EXTRA_URL="${POCKETPRINT_EXTRA_URL:-}"
 WEB_DIR="$HERE/web"
 REMOTE_TMP="/root/pocketprint-web.tar.gz"
 
@@ -148,6 +151,12 @@ for f in "${FILES[@]}"; do
     echo "   FAIL $f  served=${remote:0:16} expected=${local_sum:0:16} (edge cache? try again in a minute)"; fail=1
   fi
 done
+
+# A second public name, if configured, reaches the same service: verify it too, so a private
+# alias cannot quietly break while the published name keeps working.
+if [[ -n "$EXTRA_URL" ]]; then
+  verify_against "$EXTRA_URL" "the second public name"
+fi
 
 if [[ "$fail" == "0" ]]; then
   echo "== deployed and verified =="

@@ -21,7 +21,7 @@ if (!outDir) { console.error('usage: emit-bitmaps.mjs OUTDIR'); process.exit(2);
 mkdirSync(outDir, { recursive: true });
 
 const QR_PAYLOADS = [
-  'https://print.otelo2.com',
+  'https://print.antoniosolismz.com',
   'WIFI:T:WPA;S:Taller;P:correct-horse-battery;;',
   'BEGIN:VCARD\nVERSION:3.0\nFN:Otelo Solis\nTEL:+52 222 000 0000\nEND:VCARD',
   'caja-07 · ferretería · 2026-10-14',

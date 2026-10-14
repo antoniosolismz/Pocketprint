@@ -1,6 +1,6 @@
 Pocket Print — first hardware session, 2026-10-14
 Printer: LX-D02 (advertises as "LX-D02"), reported MAC `a2ff00…` (redacted)
-Host: Chrome on Android, page served from https://print.otelo2.com
+Host: Chrome on Android, page served from the public name
 
 Kept verbatim as evidence for PROTOCOL.md §4. Note that the repeated
 "status: battery N%" lines are the printer's own 5A 02 heartbeat arriving

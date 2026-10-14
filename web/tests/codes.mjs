@@ -95,7 +95,7 @@ check('every module column is uniform (no fractional modules)',
 
 /* ---------------------------------------------------------------------- QR */
 console.log('\n== QR structure ==');
-const qr = Codes.qrBitmap('https://print.otelo2.com', { targetDots: 384 });
+const qr = Codes.qrBitmap('https://print.antoniosolismz.com', { targetDots: 384 });
 check('module size is a whole number of dots', Number.isInteger(qr.moduleDots), String(qr.moduleDots));
 check('the whole code fits the head', qr.w <= 384 && qr.h <= 384, `${qr.w}x${qr.h}`);
 check('it uses the space rather than shrinking to a stamp',
@@ -118,8 +118,8 @@ check('the top-left finder pattern is the standard 7x7 ring', (() => {
 })());
 check('the module matrix is odd-sized (QR versions are)', Codes.qrMatrix('hi').size % 2 === 1);
 check('higher error correction grows the symbol',
-  Codes.qrMatrix('https://print.otelo2.com', { ecc: 'H' }).size >
-  Codes.qrMatrix('https://print.otelo2.com', { ecc: 'L' }).size);
+  Codes.qrMatrix('https://print.antoniosolismz.com', { ecc: 'H' }).size >
+  Codes.qrMatrix('https://print.antoniosolismz.com', { ecc: 'L' }).size);
 check('a shorter payload uses a smaller symbol',
   Codes.qrMatrix('hi').size < Codes.qrMatrix('a much longer payload that needs a bigger symbol').size);
 
@@ -144,7 +144,7 @@ check('moduleMm converts at 8 dots/mm on a 203 dpi head',
   String(Codes.qrBitmap('hi', { moduleDots: 8 }).moduleMm));
 
 console.log('\n== canEncode (the UI warning path) ==');
-check('a good QR is accepted', Codes.canEncode('qr', 'https://otelo2.com').ok === true);
+check('a good QR is accepted', Codes.canEncode('qr', 'https://antoniosolismz.com').ok === true);
 check('an impossible QR reports why',
   Codes.canEncode('qr', 'x'.repeat(400), { targetDots: 384, minDots: 5 }).ok === false,
   JSON.stringify(Codes.canEncode('qr', 'x'.repeat(400), { targetDots: 384, minDots: 5 })));

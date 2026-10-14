@@ -20,3 +20,7 @@
 
 # public HTTPS name, verified through the tunnel after every deploy
 # POCKETPRINT_PUBLIC_URL="https://print.example.com"
+
+# optional: a second public name reaching the same service (a private alias, say). Verified
+# alongside the published one so it cannot break without anyone noticing.
+# POCKETPRINT_EXTRA_URL="https://print.internal.example.com"

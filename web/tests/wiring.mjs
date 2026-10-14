@@ -85,7 +85,7 @@ check('the barcode table reaches the page as a global',
 
 if (typeof sandbox.PocketCodes === 'object') {
   check('QR generation works from the page global', (() => {
-    try { return sandbox.PocketCodes.qrBitmap('https://print.otelo2.com', { moduleDots: 4 }).w > 0; }
+    try { return sandbox.PocketCodes.qrBitmap('https://print.antoniosolismz.com', { moduleDots: 4 }).w > 0; }
     catch (e) { return false; }
   })());
   check('barcode generation works from the page global', (() => {
