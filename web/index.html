@@ -24,9 +24,33 @@
   }
   header { margin-bottom: 16px; }
   h1 { font-size: 20px; letter-spacing: -0.01em; margin: 0 0 4px; }
-  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--dim); margin: 0 0 10px; font-weight: 600; }
   p.sub { color: var(--dim); margin: 0; font-size: 13.5px; }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+
+  /* Collapsible groups. The summary carries the live values, so collapsing hides the
+   * controls and never the state. */
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; }
+  section > h2, section > .plain { padding: 14px 14px 0; }
+  details.group > summary {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    padding: 13px 14px; cursor: pointer; list-style: none; font-weight: 600; font-size: 14px;
+  }
+  details.group > summary::-webkit-details-marker { display: none; }
+  details.group > summary::after {
+    content: '▸'; margin-left: auto; color: var(--dim); font-size: 12px;
+    transition: transform 0.15s ease;
+  }
+  details.group[open] > summary::after { transform: rotate(90deg); }
+  details.group[open] > summary { border-bottom: 1px solid var(--line); }
+  details.group > summary:hover { border-color: #3a3f47; }
+  .gvals {
+    font-family: var(--mono); font-size: 11px; color: var(--dim); font-weight: 400;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 62%;
+  }
+  .gbody { padding: 14px; }
+  details.sub > summary { font-size: 13px; padding: 11px 12px; }
+  details.sub { border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); margin-top: 10px; }
+  details.sub .gbody { padding: 12px; }
+
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .row > * { flex: 1 1 auto; }
   .row.tight { gap: 8px; }
@@ -48,7 +72,6 @@
   button.primary { background: var(--accent); color: #14161a; border-color: var(--accent); }
   button.ghost { background: transparent; }
   button.tiny { padding: 6px 10px; min-height: 34px; font-size: 12.5px; font-weight: 500; }
-  button.on { background: var(--accent); color: #14161a; border-color: var(--accent); }
   .status { display: flex; align-items: center; gap: 9px; font-size: 13.5px; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: 0 0 auto; }
   .dot.on { background: var(--go); box-shadow: 0 0 8px rgba(127,209,168,.5); }
@@ -67,9 +90,15 @@
   pre.log {
     font-family: var(--mono); font-size: 11px; line-height: 1.45; color: #b9c0c8;
     background: #101216; border: 1px solid var(--line); border-radius: 8px;
-    padding: 10px; max-height: 200px; overflow: auto; margin: 10px 0 0; white-space: pre-wrap;
+    padding: 10px; max-height: 200px; overflow: auto; margin: 0; white-space: pre-wrap;
   }
-  .preview-wrap { display: flex; justify-content: center; background: #f4f2ee; border-radius: 10px; padding: 12px; overflow: auto; max-height: 460px; }
+  /* The preview follows you while you edit: on a phone the canvas would otherwise be a
+   * scroll away from the field you just changed. */
+  .sticky-preview { position: sticky; top: 8px; z-index: 5; }
+  .preview-wrap {
+    display: flex; justify-content: center; background: #f4f2ee; border-radius: 10px;
+    padding: 12px; overflow: auto; max-height: 38vh;
+  }
   canvas#preview { max-width: 100%; height: auto; image-rendering: pixelated; display: block; }
   .hint { font-size: 12px; color: var(--dim); margin-top: 8px; }
   .warn { display: none; border-radius: 9px; padding: 9px 11px; font-size: 12.5px; margin-top: 10px; border: 1px solid #4a3d24; background: #1c1710; color: #efd9ae; }
@@ -81,11 +110,10 @@
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
   @media (max-width: 460px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
-  details summary { cursor: pointer; color: var(--dim); font-size: 12.5px; }
   .smallprint { font-size: 12px; color: var(--dim); }
   .switch { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
   .switch input { width: 18px; height: 18px; accent-color: var(--go); }
-  .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
   .tabs button { flex: 1 1 auto; }
   .history { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
   .card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 7px; display: flex; flex-direction: column; gap: 6px; }
@@ -95,6 +123,7 @@
   .card button { flex: 1; padding: 5px; min-height: 30px; font-size: 11.5px; }
   .offline { display: none; font-size: 12px; color: var(--warn); margin-top: 6px; }
   .offline.show { display: block; }
+  .below { font-size: 12px; color: var(--dim); margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -106,240 +135,376 @@
 </header>
 
 <section>
-  <h2>Printer</h2>
-  <div class="status"><span class="dot" id="dot"></span><span id="statusText">not connected</span></div>
-  <div class="chips" id="chips"></div>
-  <div class="meta" id="deviceMeta"></div>
-  <progress id="progress" max="100" value="0" hidden></progress>
-  <div class="progressline" id="progressLine" hidden><span id="progressText"></span><span id="progressEta"></span></div>
-  <div class="row" style="margin-top:12px">
-    <button class="primary" id="connectBtn">Connect</button>
-    <button class="ghost" id="disconnectBtn" disabled>Disconnect</button>
-  </div>
-  <div class="switch" style="margin-top:10px">
-    <input type="checkbox" id="showAll">
-    <label for="showAll">List every Bluetooth device, not just printers</label>
-  </div>
-  <details style="margin-top:10px">
-    <summary>Advanced</summary>
-    <label class="field" style="margin-top:10px"><span>Service UUID (only if the printer's service is not found)</span>
-      <input type="text" id="serviceUuid" placeholder="ffe6 — leave empty normally">
-    </label>
+  <details class="group" id="printerDetails" open>
+    <summary>Printer <span class="gvals" id="printerVals">not connected</span></summary>
+    <div class="gbody">
+      <div class="status"><span class="dot" id="dot"></span><span id="statusText">not connected</span></div>
+      <div class="chips" id="chips"></div>
+      <div class="meta" id="deviceMeta"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="connectBtn">Connect</button>
+        <button class="ghost" id="disconnectBtn" disabled>Disconnect</button>
+      </div>
+      <div class="switch" style="margin-top:10px">
+        <input type="checkbox" id="showAll">
+        <label for="showAll">List every Bluetooth device, not just printers</label>
+      </div>
+      <label class="field" style="margin:12px 0 0"><span>Service UUID (only if the printer's service is not found)</span>
+        <input type="text" id="serviceUuid" placeholder="ffe6 — leave empty normally">
+      </label>
+      <div class="alert" id="failureBox">
+        <strong id="failureTitle">Connection failed</strong>
+        <div id="failureDetail"></div>
+        <ul>
+          <li>Disconnect the printer from anything else first — a BLE printer accepts one connection, and a phone's Bluetooth settings page counts as one.</li>
+          <li>Make sure the printer is awake (tap its button) and not mid-print.</li>
+          <li>Toggle Bluetooth off and on, then retry.</li>
+          <li>Press Connect again: these clone modules often refuse the first attempt.</li>
+        </ul>
+      </div>
+    </div>
   </details>
-  <div class="alert" id="failureBox">
-    <strong id="failureTitle">Connection failed</strong>
-    <div id="failureDetail"></div>
-    <ul>
-      <li>Disconnect the printer from anything else first — a BLE printer accepts one connection, and a phone's Bluetooth settings page counts as one.</li>
-      <li>Make sure the printer is awake (tap its button) and not mid-print.</li>
-      <li>Toggle Bluetooth off and on, then retry.</li>
-      <li>Press Connect again: these clone modules often refuse the first attempt.</li>
-    </ul>
-  </div>
 </section>
 
 <section>
-  <h2>What to print</h2>
-  <div class="tabs">
-    <button id="tabText" class="primary">Text</button>
-    <button id="tabImage">Image</button>
-    <button id="tabLabel">Label</button>
-    <button id="tabBatch">Batch</button>
+  <div class="plain" style="padding-bottom:12px">
+    <h2 style="margin:0 0 10px">What to print</h2>
+    <div class="tabs">
+      <button id="tabText" class="primary">Text</button>
+      <button id="tabImage">Image</button>
+      <button id="tabLabel">Label</button>
+      <button id="tabBatch">Batch</button>
+    </div>
   </div>
 
-  <div id="paneText">
-    <label class="field"><span>Text</span>
-      <textarea id="textInput">Hello from Pocket Print.
+  <div class="gbody" style="padding-top:0">
+    <div id="paneText">
+      <label class="field"><span>Text</span>
+        <textarea id="textInput">Hello from Pocket Print.
 
 This printer makes a lovely racket.
 Nothing left the phone.</textarea>
-    </label>
-    <div class="grid3">
-      <label class="field"><span>Size</span>
-        <select id="fontSize">
-          <option value="16">Small</option>
-          <option value="20" selected>Normal</option>
-          <option value="26">Large</option>
-          <option value="34">Huge</option>
-        </select>
       </label>
-      <label class="field"><span>Align</span>
-        <select id="textAlign">
-          <option value="left" selected>Left</option>
-          <option value="center">Centre</option>
-          <option value="right">Right</option>
-        </select>
-      </label>
-      <label class="field"><span>Face</span>
-        <select id="fontFace">
-          <option value="mono" selected>Monospace</option>
-          <option value="sans">Sans</option>
-          <option value="serif">Serif</option>
-        </select>
-      </label>
+      <details class="sub" id="textStyleDetails">
+        <summary>Style <span class="gvals" id="textStyleVals">mono · normal · left</span></summary>
+        <div class="gbody">
+          <div class="grid3">
+            <label class="field"><span>Face</span>
+              <select id="textFace">
+                <option value="mono" selected>Monospace</option>
+                <option value="sans">Sans</option>
+                <option value="serif">Serif</option>
+              </select>
+            </label>
+            <label class="field"><span>Size</span>
+              <select id="textSize">
+                <option value="16">Small</option>
+                <option value="20" selected>Normal</option>
+                <option value="26">Large</option>
+                <option value="34">Huge</option>
+              </select>
+            </label>
+            <label class="field" style="margin-bottom:0"><span>Align</span>
+              <select id="textAlign">
+                <option value="left" selected>Left</option>
+                <option value="center">Centre</option>
+                <option value="right">Right</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint" style="margin-bottom:0">These apply to text jobs only. Label and batch have their own.</p>
+        </div>
+      </details>
     </div>
-  </div>
 
-  <div id="paneImage" hidden>
-    <label class="field"><span>Image</span>
-      <input type="file" id="fileInput" accept="image/*">
-    </label>
-    <p class="hint">Processed in this page only. Photos are the one thing that gets dithered —
-      text and codes are always printed crisp.</p>
-    <div class="grid3">
-      <label class="field"><span>Rotate</span>
-        <select id="rotate">
-          <option value="0" selected>None</option>
-          <option value="1">90° right</option>
-          <option value="2">180°</option>
-          <option value="3">90° left</option>
-        </select>
+    <div id="paneImage" hidden>
+      <label class="field"><span>Image</span>
+        <input type="file" id="fileInput" accept="image/*">
       </label>
-      <label class="field"><span>Halftone</span>
-        <select id="ditherMode">
-          <option value="floyd" selected>Floyd–Steinberg</option>
-          <option value="atkinson">Atkinson</option>
-          <option value="bayer">Bayer (ordered)</option>
-          <option value="none">None (pure threshold)</option>
-        </select>
-      </label>
-      <label class="field"><span>Sharpen — <b id="sharpLabel">0</b></span>
-        <input type="range" id="sharpen" min="0" max="150" value="0">
-      </label>
+      <p class="hint" style="margin-top:0">Processed in this page only. Photographs are the one
+        thing that gets dithered — text, labels and codes are always printed crisp.</p>
+      <details class="sub" id="imageStyleDetails" open>
+        <summary>Image processing <span class="gvals" id="imageStyleVals">Atkinson · tone off</span></summary>
+        <div class="gbody">
+          <div class="grid3">
+            <label class="field"><span>Rotate</span>
+              <select id="rotate">
+                <option value="0" selected>None</option>
+                <option value="1">90° right</option>
+                <option value="2">180°</option>
+                <option value="3">90° left</option>
+              </select>
+            </label>
+            <label class="field"><span>Halftone</span>
+              <select id="ditherMode">
+                <option value="floyd" selected>Floyd–Steinberg</option>
+                <option value="atkinson">Atkinson</option>
+                <option value="bayer">Bayer (ordered)</option>
+                <option value="none">None (pure threshold)</option>
+              </select>
+            </label>
+            <label class="field"><span>Sharpen — <b id="sharpLabel">0</b></span>
+              <input type="range" id="sharpen" min="0" max="150" value="0">
+            </label>
+          </div>
+          <div class="switch" style="margin-top:2px">
+            <input type="checkbox" id="autoLevels" checked>
+            <label for="autoLevels">Auto-levels <span class="smallprint">— stretch a dark photo before dithering</span></label>
+          </div>
+          <div class="grid2" style="margin-top:10px">
+            <label class="field" style="margin-bottom:0"><span>Brightness — <b id="briLabel">0</b></span>
+              <input type="range" id="brightness" min="-100" max="100" value="0">
+            </label>
+            <label class="field" style="margin-bottom:0"><span>Contrast — <b id="conLabel">0</b></span>
+              <input type="range" id="contrast" min="-100" max="100" value="0">
+            </label>
+          </div>
+          <div class="row tight" style="margin-top:12px">
+            <button class="tiny" id="presetPhoto">Photo</button>
+            <button class="tiny" id="presetDocument">Document</button>
+            <button class="tiny" id="presetSticker">Sticker</button>
+          </div>
+        </div>
+      </details>
     </div>
-    <div class="row tight">
-      <button class="tiny" id="presetPhoto">Photo</button>
-      <button class="tiny" id="presetDocument">Document</button>
-      <button class="tiny" id="presetSticker">Sticker</button>
-    </div>
-    <p class="hint" id="presetHint">Presets set tone, halftone, sharpen and threshold together.</p>
-  </div>
 
-  <div id="paneLabel" hidden>
-    <label class="field"><span>Title (large line)</span>
-      <input type="text" id="labelTitle" value="Caja 07">
-    </label>
-    <label class="field"><span>Subtitle (smaller line, optional)</span>
-      <input type="text" id="labelSubtitle" value="Ferretería · estante A">
-    </label>
-    <div class="grid2">
-      <label class="field"><span>Code</span>
-        <select id="codeKind">
-          <option value="none" selected>None</option>
-          <option value="qr">QR code</option>
-          <option value="code128">Barcode (Code 128)</option>
-        </select>
+    <div id="paneLabel" hidden>
+      <label class="field"><span>Title (large line)</span>
+        <input type="text" id="labelTitle" value="Caja 07">
       </label>
-      <label class="field"><span>Error correction (QR)</span>
-        <select id="codeEcc">
-          <option value="L">L — 7%</option>
-          <option value="M" selected>M — 15%</option>
-          <option value="Q">Q — 25%</option>
-          <option value="H">H — 30%</option>
-        </select>
+      <label class="field"><span>Subtitle (smaller line, optional)</span>
+        <input type="text" id="labelSubtitle" value="Ferretería · estante A">
       </label>
+      <div class="grid2">
+        <label class="field"><span>Code</span>
+          <select id="codeKind">
+            <option value="none" selected>None</option>
+            <option value="qr">QR code</option>
+            <option value="code128">Barcode (Code 128)</option>
+          </select>
+        </label>
+        <label class="field"><span>Error correction (QR)</span>
+          <select id="codeEcc">
+            <option value="L">L — 7%</option>
+            <option value="M" selected>M — 15%</option>
+            <option value="Q">Q — 25%</option>
+            <option value="H">H — 30%</option>
+          </select>
+        </label>
+      </div>
+      <label class="field"><span>Code contents</span>
+        <input type="text" id="codeText" placeholder="https://…  or  CAJA-07">
+      </label>
+      <details class="sub" id="labelStyleDetails">
+        <summary>Label style <span class="gvals" id="labelStyleVals">mono · left · 30/22</span></summary>
+        <div class="gbody">
+          <div class="grid2">
+            <label class="field"><span>Face</span>
+              <select id="labelFace">
+                <option value="mono" selected>Monospace</option>
+                <option value="sans">Sans</option>
+                <option value="serif">Serif</option>
+              </select>
+            </label>
+            <label class="field"><span>Align</span>
+              <select id="labelAlign">
+                <option value="left" selected>Left</option>
+                <option value="center">Centre</option>
+                <option value="right">Right</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid2">
+            <label class="field"><span>Title size</span>
+              <select id="labelTitleSize">
+                <option value="20">Small</option>
+                <option value="24">Medium</option>
+                <option value="30" selected>Large</option>
+                <option value="40">Huge</option>
+              </select>
+            </label>
+            <label class="field" style="margin-bottom:0"><span>Subtitle size</span>
+              <select id="labelSubtitleSize">
+                <option value="16">Small</option>
+                <option value="22" selected>Normal</option>
+                <option value="28">Large</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <div class="switch"><input type="checkbox" id="labelBorder"><label for="labelBorder">Border</label></div>
+            <div class="switch"><input type="checkbox" id="labelCut" checked><label for="labelCut">Cut guide between labels</label></div>
+          </div>
+          <label class="field" style="margin:10px 0 0"><span>Tear-off space — <b id="tearLabel">6</b> mm
+            <span class="smallprint">(blank feed after each label so it tears off cleanly)</span></span>
+            <input type="range" id="labelTear" min="0" max="20" value="6">
+          </label>
+          <p class="hint" style="margin-bottom:0">Shared with the Batch tab — the same style applies
+            to every label on a sheet.</p>
+        </div>
+      </details>
     </div>
-    <label class="field"><span>Code contents</span>
-      <input type="text" id="codeText" placeholder="https://…  or  CAJA-07">
-    </label>
-    <div class="row">
-      <div class="switch"><input type="checkbox" id="labelBorder"><label for="labelBorder">Border</label></div>
-      <div class="switch"><input type="checkbox" id="labelCut" checked><label for="labelCut">Cut guide between labels</label></div>
-    </div>
-    <label class="field" style="margin:10px 0 0"><span>Tear-off space — <b id="tearLabel">6</b> mm
-      <span class="smallprint">(blank feed after each label so it tears off cleanly)</span></span>
-      <input type="range" id="tearMm" min="0" max="20" value="6">
-    </label>
-  </div>
 
-  <div id="paneBatch" hidden>
-    <label class="field"><span>One label per line</span>
-      <textarea id="batchInput" class="tall">caja-01
+    <div id="paneBatch" hidden>
+      <label class="field"><span>One label per line</span>
+        <textarea id="batchInput" class="tall">caja-01
 caja-02	Estante A
 caja-03	Estante B
 caja-04	Estante C</textarea>
-    </label>
-    <p class="hint">Each line becomes a label using the Label tab's layout. Use a tab or
-      <code>|</code> to add a subtitle. Blank lines are skipped. The whole batch prints as one
-      continuous sheet, so it only prints once you press Print.</p>
-    <div class="grid2">
-      <label class="field"><span>Copies of each</span>
-        <input type="number" id="batchCopies" value="1" min="1" max="20">
       </label>
-      <label class="field"><span>Stagger (number each label)</span>
-        <select id="batchStagger">
-          <option value="none" selected>No numbering</option>
-          <option value="seq">Append 1, 2, 3…</option>
-          <option value="ofn">Append 1/N, 2/N…</option>
-        </select>
-      </label>
+      <p class="hint" style="margin-top:0">Use a tab or <code>|</code> to add a subtitle. Blank
+        lines are skipped. The whole batch prints as one continuous sheet.</p>
+      <div class="grid2">
+        <label class="field"><span>Copies of each</span>
+          <input type="number" id="batchCopies" value="1" min="1" max="20">
+        </label>
+        <label class="field"><span>Stagger (number each label)</span>
+          <select id="batchStagger">
+            <option value="none" selected>No numbering</option>
+            <option value="seq">Append 1, 2, 3…</option>
+            <option value="ofn">Append 1/N, 2/N…</option>
+          </select>
+        </label>
+      </div>
+      <details class="sub" id="batchStyleDetails">
+        <summary>Label style <span class="gvals" id="batchStyleVals">mono · left · 30/22</span></summary>
+        <div class="gbody">
+          <div class="grid2">
+            <label class="field"><span>Face</span>
+              <select id="batchFace">
+                <option value="mono" selected>Monospace</option>
+                <option value="sans">Sans</option>
+                <option value="serif">Serif</option>
+              </select>
+            </label>
+            <label class="field"><span>Align</span>
+              <select id="batchAlign">
+                <option value="left" selected>Left</option>
+                <option value="center">Centre</option>
+                <option value="right">Right</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid2">
+            <label class="field"><span>Title size</span>
+              <select id="batchTitleSize">
+                <option value="20">Small</option>
+                <option value="24">Medium</option>
+                <option value="30" selected>Large</option>
+                <option value="40">Huge</option>
+              </select>
+            </label>
+            <label class="field" style="margin-bottom:0"><span>Subtitle size</span>
+              <select id="batchSubtitleSize">
+                <option value="16">Small</option>
+                <option value="22" selected>Normal</option>
+                <option value="28">Large</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <div class="switch"><input type="checkbox" id="batchBorder"><label for="batchBorder">Border</label></div>
+            <div class="switch"><input type="checkbox" id="batchCut" checked><label for="batchCut">Cut guide between labels</label></div>
+          </div>
+          <label class="field" style="margin:10px 0 0"><span>Tear-off space — <b id="batchTearLabel">6</b> mm</span>
+            <input type="range" id="batchTear" min="0" max="20" value="6">
+          </label>
+          <p class="hint" style="margin-bottom:0">The same style as the Label tab — editing it here
+            changes it there too, because a batch is just that label repeated.</p>
+        </div>
+      </details>
     </div>
-  </div>
 
-  <div class="warn" id="warnBox"><strong>One thing to fix</strong><ul id="warnList"></ul></div>
-</section>
-
-<section>
-  <h2>Print settings</h2>
-  <div class="grid2">
-    <label class="field"><span>Print width (dots)</span>
-      <select id="widthSel">
-        <option value="384" selected>384 — fixed for this head (48 mm)</option>
-      </select>
-    </label>
-    <label class="field"><span>Copies</span>
-      <input type="number" id="copiesInput" value="1" min="1" max="20">
-    </label>
-  </div>
-  <label class="field"><span>Darkness / threshold — <b id="thrLabel">128</b>
-    <span class="smallprint">(lower = darker image)</span></span>
-    <input type="range" id="threshold" min="1" max="254" value="128">
-  </label>
-  <label class="field"><span>Print head density — <b id="denLabel">4</b>
-    <span class="smallprint">(1–7, the printer's own heat setting; default 4 matches the vendor app)</span></span>
-    <input type="range" id="density" min="1" max="7" value="4">
-  </label>
-  <div class="switch" style="margin-top:4px">
-    <input type="checkbox" id="autoLevels" checked>
-    <label for="autoLevels">Auto-levels <span class="smallprint">— stretch a dark photo before dithering</span></label>
-  </div>
-  <div class="grid2" style="margin-top:10px">
-    <label class="field" style="margin-bottom:0"><span>Brightness — <b id="briLabel">0</b></span>
-      <input type="range" id="brightness" min="-100" max="100" value="0">
-    </label>
-    <label class="field" style="margin-bottom:0"><span>Contrast — <b id="conLabel">0</b></span>
-      <input type="range" id="contrast" min="-100" max="100" value="0">
-    </label>
-  </div>
-  <div class="row" style="margin-top:10px">
-    <div class="switch"><input type="checkbox" id="invert"><label for="invert">Invert</label></div>
+    <div class="warn" id="warnBox"><strong>One thing to fix</strong><ul id="warnList"></ul></div>
   </div>
 </section>
 
-<section>
-  <h2>Preview</h2>
-  <div class="preview-wrap"><canvas id="preview" width="384" height="120"></canvas></div>
-  <div class="meta" id="previewMeta"></div>
+<section class="sticky-preview">
+  <details class="group" id="previewDetails" open>
+    <summary>Preview <span class="gvals" id="previewSummary">—</span></summary>
+    <div class="gbody">
+      <div class="preview-wrap"><canvas id="preview" width="384" height="120"></canvas></div>
+      <div class="meta" id="previewMeta"></div>
+    </div>
+  </details>
 </section>
 
 <section>
-  <h2>Print</h2>
-  <div class="row">
-    <button class="primary" id="printBtn" disabled>Print</button>
-    <button class="ghost" id="feedBtn" disabled>Feed paper</button>
-    <button class="ghost" id="copyLogBtn">Copy log</button>
-  </div>
-  <pre class="log" id="log">ready.</pre>
+  <details class="group" id="qualityDetails">
+    <summary>Print quality <span class="gvals" id="qualityVals">density 4 · threshold 128</span></summary>
+    <div class="gbody">
+      <label class="field"><span>Print head density — <b id="denLabel">4</b>
+        <span class="smallprint">(1–7, the printer's own heat. Default 4 matches the vendor app)</span></span>
+        <input type="range" id="density" min="1" max="7" value="4">
+      </label>
+      <label class="field"><span>Threshold — <b id="thrLabel">128</b>
+        <span class="smallprint">(pixel below this prints black: <b>higher = darker photos and bolder text</b>)</span></span>
+        <input type="range" id="threshold" min="1" max="254" value="128">
+      </label>
+      <div class="switch"><input type="checkbox" id="invert"><label for="invert">Invert (white on black)</label></div>
+      <p class="hint" style="margin-bottom:0">Density is how hot the head runs; threshold is where
+        the line between ink and paper falls. If a print looks faint, try density first, then a
+        higher threshold.</p>
+    </div>
+  </details>
 </section>
 
 <section>
-  <h2>Recent prints</h2>
-  <div class="history" id="history"></div>
-  <p class="hint" id="historyEmpty">Nothing yet. Prints you send are kept here — in this
-    browser only, so you can reprint one without picking the file again.</p>
-  <div class="row" style="margin-top:10px">
-    <button class="ghost tiny" id="clearHistory">Forget all prints</button>
+  <details class="group" id="paperDetails">
+    <summary>Printer &amp; paper <span class="gvals" id="paperVals">384 dots · 1 copy</span></summary>
+    <div class="gbody">
+      <div class="grid2">
+        <label class="field"><span>Print width (dots)</span>
+          <select id="widthSel">
+            <option value="384" selected>384 — fixed for this head (48 mm)</option>
+          </select>
+        </label>
+        <label class="field"><span>Copies</span>
+          <input type="number" id="copiesInput" value="1" min="1" max="20">
+        </label>
+      </div>
+    </div>
+  </details>
+</section>
+
+<section>
+  <div class="plain" style="padding-bottom:12px">
+    <h2 style="margin:0 0 10px">Print</h2>
+    <div class="row">
+      <button class="primary" id="printBtn" disabled>Print</button>
+      <button class="ghost" id="feedBtn" disabled>Feed paper</button>
+    </div>
+    <progress id="progress" max="100" value="0" hidden></progress>
+    <div class="progressline" id="progressLine" hidden><span id="progressText"></span><span id="progressEta"></span></div>
   </div>
+</section>
+
+<section>
+  <details class="group" id="historyDetails">
+    <summary>Recent prints <span class="gvals" id="historyVals">nothing kept</span></summary>
+    <div class="gbody">
+      <div class="history" id="history"></div>
+      <p class="hint" id="historyEmpty">Nothing yet. Prints you send are kept here — in this browser
+        only, so you can reprint one without picking the file again.</p>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost tiny" id="clearHistory">Forget all prints</button>
+      </div>
+    </div>
+  </details>
+</section>
+
+<section>
+  <details class="group" id="logDetails">
+    <summary>Diagnostics <span class="gvals" id="logVals">ready.</span></summary>
+    <div class="gbody">
+      <pre class="log" id="log">ready.</pre>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost tiny" id="copyLogBtn">Copy log</button>
+      </div>
+      <p class="hint" style="margin-bottom:0">Every frame the app sends or receives is recorded
+        here. If a print misbehaves, copy this and it usually explains itself.</p>
+    </div>
+  </details>
 </section>
 
 <details>
@@ -371,8 +536,6 @@ caja-04	Estante C</textarea>
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  const logEl = $('log');
-  const lines = [];
   const FP = window.FunnyPrint;
   const Codes = window.PocketCodes;
   const Label = window.PocketLabel;
@@ -385,9 +548,8 @@ caja-04	Estante C</textarea>
    * label.js gained absoluteLayout: the label and batch previews silently stopped updating,
    * because the render path threw and nothing repainted, while text and image were fine.
    *
-   * deploy.sh now stamps every script URL with the build hash, which makes a mixture
-   * impossible. This check is the belt to that braces: if a mismatch ever happens again it
-   * says so, in the log and on screen, instead of freezing a preview. */
+   * deploy.sh stamps every script URL with the build hash, which makes a mixture impossible.
+   * This check is the belt to that braces. */
   const REQUIRED_API = [
     ['FunnyPrint.wrapText', FP && FP.wrapText],
     ['FunnyPrint.processImage', FP && FP.processImage],
@@ -398,21 +560,54 @@ caja-04	Estante C</textarea>
   ];
   const missingApi = REQUIRED_API.filter(([, fn]) => typeof fn !== 'function').map(([name]) => name);
 
+  /* ------------------------------------------------------------------ state
+   *
+   * Two style scopes, deliberately:
+   *   style.text  — text jobs only.
+   *   style.label — labels AND batches, because a batch is the label template applied to a
+   *                 list. Editable from either tab; they are one object, not two settings
+   *                 that happen to look alike.
+   *
+   * Everything else (density, threshold, width, copies) belongs to the printer or the paper,
+   * not to the content, and stays global. */
+  const style = {
+    text: { face: 'mono', size: 20, align: 'left' },
+    label: {
+      face: 'mono', align: 'left', titleSize: 30, subtitleSize: 22,
+      border: false, cut: true, tearMm: 6,
+    },
+  };
+
+  const FONT_STACK = {
+    mono: 'ui-monospace, Menlo, Consolas, monospace',
+    sans: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    serif: 'Georgia, "Times New Roman", serif',
+  };
+  const FACE_NAME = { mono: 'mono', sans: 'sans', serif: 'serif' };
+  const SIZE_NAME = { '16': 'small', '20': 'normal', '26': 'large', '34': 'huge' };
+  const BODY_SIZE = { labelTitleSize: 'title', batchTitleSize: 'title' };
+
+  const lines = [];
+  const logEl = $('log');
+
   function say(msg) {
     const stamp = new Date().toTimeString().slice(0, 8);
     lines.push(`[${stamp}] ${msg}`);
     if (lines.length > 400) lines.shift();
     logEl.textContent = lines.join('\n');
     logEl.scrollTop = logEl.scrollHeight;
+    $('logVals').textContent = msg.length > 46 ? msg.slice(0, 46) + '…' : msg;
   }
   function setStatus(text, cls) {
     $('statusText').textContent = text;
     $('dot').className = 'dot' + (cls ? ' ' + cls : '');
+    $('printerVals').textContent = text;
   }
   function showFailure(title, detail) {
     $('failureTitle').textContent = title;
     $('failureDetail').textContent = detail || '';
     $('failureBox').classList.add('show');
+    $('printerDetails').open = true;
   }
   function clearFailure() { $('failureBox').classList.remove('show'); }
   function showWarnings(list) {
@@ -433,17 +628,89 @@ caja-04	Estante C</textarea>
     raster: null, w: 384, h: 0, meta: '', warnings: [],
   };
 
-  /* --------------------------------------------------------------- rasterising */
+  /* ------------------------------------------------------- style plumbing */
+
+  /* One table drives both label panes: each row is a setting, the element that holds it in
+   * the Label tab and the one in the Batch tab. Anything that reads a control goes through
+   * this, so the two tabs cannot drift apart. */
+  const LABEL_FIELDS = [
+    ['face', 'select', 'labelFace', 'batchFace'],
+    ['align', 'select', 'labelAlign', 'batchAlign'],
+    ['titleSize', 'number', 'labelTitleSize', 'batchTitleSize'],
+    ['subtitleSize', 'number', 'labelSubtitleSize', 'batchSubtitleSize'],
+    ['border', 'check', 'labelBorder', 'batchBorder'],
+    ['cut', 'check', 'labelCut', 'batchCut'],
+    ['tearMm', 'number', 'labelTear', 'batchTear'],
+  ];
+
+  function readField(el, kind) {
+    if (kind === 'check') return el.checked;
+    if (kind === 'number') return parseInt(el.value, 10) || 0;
+    return el.value;
+  }
+  function writeField(el, kind, value) {
+    if (kind === 'check') el.checked = !!value;
+    else el.value = value;
+  }
+  function mirrorLabelStyle() {
+    for (const [key, kind, labelId, batchId] of LABEL_FIELDS) {
+      for (const id of [labelId, batchId]) {
+        const el = $(id);
+        if (el) writeField(el, kind, style.label[key]);
+      }
+    }
+    $('tearLabel').textContent = style.label.tearMm;
+    $('batchTearLabel').textContent = style.label.tearMm;
+  }
+  function bindLabelStyle() {
+    for (const [key, kind, labelId, batchId] of LABEL_FIELDS) {
+      for (const id of [labelId, batchId]) {
+        const el = $(id);
+        if (!el) continue;
+        const handler = () => {
+          style.label[key] = readField(el, kind);
+          mirrorLabelStyle();
+          render();
+        };
+        el.addEventListener('input', handler);
+        el.addEventListener('change', handler);
+      }
+    }
+    mirrorLabelStyle();
+  }
+  function bindTextStyle() {
+    for (const [key, id, kind] of [['face', 'textFace', 'select'],
+                                   ['size', 'textSize', 'number'],
+                                   ['align', 'textAlign', 'select']]) {
+      const el = $(id);
+      const handler = () => { style.text[key] = readField(el, kind); render(); };
+      el.addEventListener('input', handler);
+      el.addEventListener('change', handler);
+    }
+  }
+
+  /* Measurement has to use the label's own face and sizes, or the plan wraps differently from
+   * what gets drawn. The font is set on every call, not captured, because the two measurers
+   * share one probe context. */
+  function measureCtx() {
+    const face = FONT_STACK[style.label.face] || FONT_STACK.mono;
+    const probe = document.createElement('canvas').getContext('2d');
+    const measureFor = (size, bold) => (s) => {
+      probe.font = `${bold ? 'bold ' : ''}${size}px ${face}`;
+      return probe.measureText(s).width;
+    };
+    return {
+      measure: measureFor(style.label.titleSize, true),
+      measureSub: measureFor(style.label.subtitleSize, false),
+    };
+  }
+
+  /* ------------------------------------------------------------- rasterising */
   const previewCanvas = $('preview');
   const previewCtx = previewCanvas.getContext('2d');
   const targetWidth = () => parseInt($('widthSel').value, 10) || 384;
   const threshold = () => parseInt($('threshold').value, 10) || 128;
   const density = () => parseInt($('density').value, 10) || 4;
-  const FONT_STACK = {
-    mono: 'ui-monospace, Menlo, Consolas, monospace',
-    sans: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-    serif: 'Georgia, "Times New Roman", serif',
-  };
 
   function testPage(w) {
     const canvas = document.createElement('canvas');
@@ -470,7 +737,7 @@ caja-04	Estante C</textarea>
       ctx.fillRect(6, y, w - 12, 8); y += 10;
     }
     ctx.fillStyle = '#000';
-    ctx.fillText('grey ramp 0 -> 255 (solid where the head fires)', 6, y + 14);
+    ctx.fillText('grey ramp — the step where it turns to ink is your threshold', 6, y + 14);
     ctx.fillRect(6, y + 24, (w - 18) / 3, 30);
     ctx.strokeRect(6 + (w - 18) / 3 + 6, y + 24, (w - 18) / 3, 30);
     ctx.beginPath();
@@ -496,13 +763,14 @@ caja-04	Estante C</textarea>
 
   function textCanvas() {
     const w = targetWidth();
-    const size = parseInt($('fontSize').value, 10) || 20;
-    const face = FONT_STACK[$('fontFace').value] || FONT_STACK.mono;
+    const size = style.text.size;
+    const face = FONT_STACK[style.text.face] || FONT_STACK.mono;
     const margin = 6;
     const lineGap = Math.round(size * 1.3);
     const probe = document.createElement('canvas').getContext('2d');
     probe.font = `${size}px ${face}`;
-    const linesOut = FP.wrapText((s) => probe.measureText(s).width, $('textInput').value || '', w - margin * 2);
+    const linesOut = FP.wrapText((s) => probe.measureText(s).width,
+      $('textInput').value || '', w - margin * 2);
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = Math.max(lineGap * 2, margin * 2 + linesOut.length * lineGap);
@@ -510,9 +778,9 @@ caja-04	Estante C</textarea>
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, canvas.height);
     ctx.fillStyle = '#000';
     ctx.font = `${size}px ${face}`;
-    ctx.textAlign = $('textAlign').value === 'center' ? 'center'
-      : $('textAlign').value === 'right' ? 'right' : 'left';
-    const x = ctx.textAlign === 'center' ? w / 2 : ctx.textAlign === 'right' ? w - margin : margin;
+    ctx.textAlign = style.text.align;
+    const x = style.text.align === 'center' ? w / 2
+      : style.text.align === 'right' ? w - margin : margin;
     linesOut.forEach((line, i) =>
       ctx.fillText(line, x, margin + (i + 1) * lineGap - Math.round(lineGap * 0.3)));
     return canvas;
@@ -539,10 +807,12 @@ caja-04	Estante C</textarea>
       width: targetWidth(),
       title: $('labelTitle').value,
       subtitle: $('labelSubtitle').value,
-      align: $('textAlign').value,
-      border: $('labelBorder').checked,
-      cutGuide: $('labelCut').checked,
-      tearMm: parseInt($('tearMm').value, 10) || 0,
+      align: style.label.align,
+      titleSize: style.label.titleSize,
+      subtitleSize: style.label.subtitleSize,
+      border: style.label.border,
+      cutGuide: style.label.cut,
+      tearMm: style.label.tearMm,
     };
     if (kind !== 'none') {
       spec.code = { kind, text: $('codeText').value || $('labelTitle').value || '', ecc: $('codeEcc').value };
@@ -550,23 +820,9 @@ caja-04	Estante C</textarea>
     return spec;
   }
 
-  /* Measure with the real font so the plan matches what gets drawn. Bold and size both
-   * matter: measuring a subtitle with the title's bold 30 px made it wrap early. */
-  function measureFor(size, bold) {
-    const probe = document.createElement('canvas').getContext('2d');
-    probe.font = `${bold ? 'bold ' : ''}${size}px ${FONT_STACK[$('fontFace').value] || FONT_STACK.mono}`;
-    return (s) => probe.measureText(s).width;
-  }
-  function measureCtx() {
-    return {
-      measure: measureFor(Label.DEFAULTS.titleSize, true),
-      measureSub: measureFor(Label.DEFAULTS.subtitleSize, false),
-    };
-  }
-
-  /* Draw a plan (one label or a whole sheet) into a canvas at 1:1 dots. */
-  function drawPlan(sheet, opts) {
-    const o = opts || {};
+  /* Draw a plan (one label or a whole sheet). All coordinates come from the planner: this
+   * function draws what it is handed and never adds an offset of its own. */
+  function drawPlan(sheet) {
     const W = sheet.width;
     const H = Math.max(1, Math.ceil(sheet.height));
     const canvas = document.createElement('canvas');
@@ -575,8 +831,7 @@ caja-04	Estante C</textarea>
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#000';
     ctx.textBaseline = 'alphabetic';
-
-    const face = FONT_STACK[$('fontFace').value] || FONT_STACK.mono;
+    const face = FONT_STACK[style.label.face] || FONT_STACK.mono;
 
     for (const plan of sheet.labels) {
       const placed = Label.absoluteLayout(plan);
@@ -602,13 +857,10 @@ caja-04	Estante C</textarea>
       }
     }
 
-    /* cut guides: dashed rule across the seam, and a scissors-ish marker */
-    if ($('labelCut').checked) {
+    if (style.label.cut) {
       ctx.fillStyle = '#000';
       for (const y of sheet.cutYs) {
-        for (let x = 0; x < W; x += 10) {
-          ctx.fillRect(x, y, 6, 1);
-        }
+        for (let x = 0; x < W; x += 10) ctx.fillRect(x, y, 6, 1);
       }
     }
     return canvas;
@@ -621,13 +873,10 @@ caja-04	Estante C</textarea>
     let items = Label.itemsFromList($('batchInput').value, base);
     if (stagger !== 'none') {
       const n = items.length;
-      const numbered = [];
-      items.forEach((item, i) => {
-        const tag = stagger === 'seq' ? String(i + 1) : `${i + 1}/${n}`;
-        const copy = Object.assign({}, item, { subtitle: [item.subtitle, tag].filter(Boolean).join(' · ') });
-        numbered.push(copy);
-      });
-      items = numbered;
+      items = items.map((item, i) => Object.assign({}, item, {
+        subtitle: [item.subtitle, stagger === 'seq' ? String(i + 1) : `${i + 1}/${n}`]
+          .filter(Boolean).join(' · '),
+      }));
     }
     const expanded = [];
     for (const item of items) for (let c = 0; c < copies; c++) expanded.push(item);
@@ -637,12 +886,16 @@ caja-04	Estante C</textarea>
   /* --------------------------------------------------------------- the pipeline */
 
   function compose() {
-    /* Returns {canvas, mode} for whatever is selected. Label and batch are drawn from a
-     * plan; everything else is a canvas that goes through the image pipeline. */
     if (state.mode === 'label') {
       const plan = Label.planLabel(labelSpecFromForm(), measureCtx());
-      const sheet = { labels: [plan], height: plan.totalHeight, cutYs: [], width: plan.width, warnings: plan.warnings };
-      return { canvas: drawPlan(sheet), crisp: true, warnings: plan.warnings, meta: `${plan.blocks.length} block(s)`, heightMm: plan.heightMm };
+      const sheet = {
+        labels: [plan], height: plan.totalHeight, cutYs: [], width: plan.width,
+        warnings: plan.warnings,
+      };
+      return {
+        canvas: drawPlan(sheet), crisp: true, warnings: plan.warnings,
+        meta: `${plan.blocks.length} block(s)`, heightMm: plan.heightMm,
+      };
     }
     if (state.mode === 'batch') {
       const sheet = batchSheet();
@@ -658,13 +911,28 @@ caja-04	Estante C</textarea>
     return { canvas: textCanvas(), crisp: true, warnings: [], meta: '' };
   }
 
+  function updateSummaries() {
+    $('textStyleVals').textContent =
+      `${FACE_NAME[style.text.face] || style.text.face} · ${SIZE_NAME[style.text.size] || style.text.size} · ${style.text.align}`;
+    const labelStyle = `${FACE_NAME[style.label.face] || style.label.face} · ${style.label.align} · ` +
+      `${style.label.titleSize}/${style.label.subtitleSize}`;
+    $('labelStyleVals').textContent = labelStyle;
+    $('batchStyleVals').textContent = labelStyle;
+    $('qualityVals').textContent = `density ${density()} · threshold ${threshold()}` +
+      ($('invert').checked ? ' · inverted' : '');
+    $('paperVals').textContent = `${targetWidth()} dots · ${Math.max(1, parseInt($('copiesInput').value, 10) || 1)} copy`;
+    $('imageStyleVals').textContent =
+      (state.mode === 'image' ? $('ditherMode').value : 'Atkinson') +
+      ($('autoLevels').checked ? ' · auto-levels' : ' · tone off');
+  }
+
   function render() {
     $('thrLabel').textContent = $('threshold').value;
     $('denLabel').textContent = $('density').value;
     $('briLabel').textContent = $('brightness').value;
     $('conLabel').textContent = $('contrast').value;
     $('sharpLabel').textContent = $('sharpen').value;
-    $('tearLabel').textContent = $('tearMm').value;
+    updateSummaries();
 
     let built;
     try {
@@ -677,12 +945,14 @@ caja-04	Estante C</textarea>
       $('previewMeta').textContent = 'preview failed — see above';
       showWarnings(['this preview could not be drawn: ' + msg]);
       say('render error: ' + msg);
+      $('logDetails').open = true;
       updatePrintEnabled();
       return;
     }
     if (!built.canvas) {
       state.bits = state.raster = null;
       $('previewMeta').textContent = (built.warnings || []).join(' · ') || 'nothing to preview';
+      $('previewSummary').textContent = 'nothing to preview';
       showWarnings(built.warnings);
       updatePrintEnabled();
       return;
@@ -700,9 +970,10 @@ caja-04	Estante C</textarea>
 
     let bits;
     if (built.crisp) {
-      /* Text, labels and codes are already bilevel: dithering or tone shaping them would
-       * only smear the edges. Threshold, and that is all. */
-      bits = FP.thresholdBits(pixels, w, h, 128);
+      /* Text, labels and codes are bilevel by design — never dithered. The threshold still
+       * applies, because it decides how the antialiased edges binarize, which is what makes
+       * text heavier or lighter on paper. */
+      bits = FP.thresholdBits(pixels, w, h, threshold());
     } else {
       const processed = FP.processImage(pixels, w, h, {
         rotate: parseInt($('rotate').value, 10) || 0,
@@ -722,7 +993,6 @@ caja-04	Estante C</textarea>
     state.warnings = built.warnings || [];
     showWarnings(state.warnings);
 
-    /* preview: draw the same bits back, so what you see is what gets sent */
     const zoom = Math.max(1, Math.floor(Math.min(2.4, 640 / w)));
     previewCanvas.width = w * zoom;
     previewCanvas.height = h * zoom;
@@ -736,11 +1006,10 @@ caja-04	Estante C</textarea>
     }
 
     const packets = Math.ceil(state.raster.length / FP.PAYLOAD_LEN);
-    const tone = (!built.crisp && $('autoLevels').checked) ? ' · auto-levels' : '';
-    const halftone = built.crisp ? ' · crisp (no dither)' : ' · ' + $('ditherMode').value;
-    const lengthMm = mm(h);
+    const halftone = built.crisp ? 'crisp' : $('ditherMode').value;
+    $('previewSummary').textContent = `${w}×${h} · ${mm(h)} mm · ${packets}p`;
     $('previewMeta').textContent =
-      `${w}×${h} dots · ${lengthMm} mm of paper · ${packets} packet(s) · density ${density()}${halftone}${tone}` +
+      `${w}×${h} dots · ${mm(h)} mm of paper · ${packets} packet(s) · density ${density()} · ${halftone}` +
       (built.meta ? ` · ${built.meta}` : '');
     updatePrintEnabled();
   }
@@ -777,6 +1046,8 @@ caja-04	Estante C</textarea>
       $('disconnectBtn').disabled = false;
       $('connectBtn').disabled = true;
       $('feedBtn').disabled = false;
+      /* connected: the connection controls are noise now, so fold them away */
+      $('printerDetails').open = false;
       say('ready to print');
       updatePrintEnabled();
     } catch (err) {
@@ -796,13 +1067,12 @@ caja-04	Estante C</textarea>
     $('disconnectBtn').disabled = true;
     $('connectBtn').disabled = false;
     $('feedBtn').disabled = true;
+    $('printerDetails').open = true;
     setProgressHidden();
     say('disconnected');
     updatePrintEnabled();
   };
 
-  /* Battery and paper come from the printer's own 2-second heartbeat — free information
-   * that used to sit in the log where nobody looks. */
   function updateDeviceMeta() {
     if (!state.link) return;
     const s = state.link.session;
@@ -817,8 +1087,11 @@ caja-04	Estante C</textarea>
       if (s.status.lowBattery) chips.push('<span class="chip bad">low battery</span>');
     }
     $('chips').innerHTML = chips.join('');
+    const name = (transport.device && transport.device.name) || 'printer';
     $('deviceMeta').textContent =
-      `${transport.device && transport.device.name || 'unnamed'} · service ${transport.serviceUuid || '?'} · MAC ${s.mac || '?'}`;
+      `${name} · service ${transport.serviceUuid || '?'} · MAC ${s.mac || '?'}`;
+    const battery = s.status ? ` · ${s.status.battery}%${s.status.charging ? ' charging' : ''}` : '';
+    $('printerVals').textContent = `${name}${battery}`;
   }
 
   function setProgressHidden() {
@@ -841,7 +1114,9 @@ caja-04	Estante C</textarea>
     $('progress').hidden = false;
     $('progressLine').hidden = false;
     $('progress').value = p.percent;
-    $('progressText').textContent = `${p.sent}/${p.total} packets${p.hold ? ' · printer asked us to hold' : ''}${p.pacingMs > 15 ? ` · pacing ${p.pacingMs} ms` : ''}`;
+    $('progressText').textContent = `${p.sent}/${p.total} packets` +
+      (p.hold ? ' · printer asked us to hold' : '') +
+      (p.pacingMs > 15 ? ` · pacing ${p.pacingMs} ms` : '');
     $('progressEta').textContent = p.etaMs ? `~${Math.max(1, Math.round(p.etaMs / 1000))} s left` : '';
   }
 
@@ -856,16 +1131,14 @@ caja-04	Estante C</textarea>
   $('printBtn').onclick = async () => {
     if (!state.link || !state.raster) return;
     const copies = Math.max(1, parseInt($('copiesInput').value, 10) || 1);
-    const batchMode = state.mode === 'batch';
     clearFailure();
     $('printBtn').disabled = true;
     try {
       if (state.mode === 'batch') {
-        /* a batch is one sheet already containing every label: no repeat loop */
         setStatus('printing the sheet…', 'busy');
         const ok = await printOnce(state.raster, { density: density() });
         if (!ok) throw new Error('the printer did not confirm the end of the job');
-        await saveHistory('batch', `${state.meta || 'batch'} · ${state.h} dots`);
+        await saveHistory('batch', `${state.meta || 'batch'}`);
         say(`batch printed: ${state.meta}`);
       } else {
         for (let c = 0; c < copies; c++) {
@@ -873,7 +1146,7 @@ caja-04	Estante C</textarea>
           else setStatus('printing…', 'busy');
           const ok = await printOnce(state.raster, { density: density() });
           if (!ok) throw new Error('the printer stopped answering mid-job');
-          if (!batchMode) await saveHistory(state.mode, describeJob());
+          await saveHistory(state.mode, describeJob());
           await new Promise((r) => setTimeout(r, 350));
         }
       }
@@ -885,6 +1158,7 @@ caja-04	Estante C</textarea>
       setStatus('print failed', 'err');
       say('print error: ' + msg);
       showFailure('Print failed', msg + ' — check paper and that the printer is awake.');
+      $('logDetails').open = true;
     } finally {
       $('printBtn').disabled = false;
     }
@@ -917,9 +1191,7 @@ caja-04	Estante C</textarea>
     setTimeout(() => { $('copyLogBtn').textContent = 'Copy log'; }, 1600);
   };
 
-  /* --------------------------------------------------------------- history
-   * IndexedDB, on this device only. Storing the finished raster (not the source) means a
-   * reprint is byte-identical to the original, whatever the settings have become since. */
+  /* --------------------------------------------------------------- history */
 
   const DB_NAME = 'pocketprint';
   const STORE = 'prints';
@@ -929,15 +1201,12 @@ caja-04	Estante C</textarea>
       const req = indexedDB.open(DB_NAME, 1);
       req.onupgradeneeded = () => {
         const db = req.result;
-        if (!db.objectStoreNames.contains(STORE)) {
-          db.createObjectStore(STORE, { keyPath: 'id' });
-        }
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
   }
-
   function b64FromBytes(bytes) {
     let s = '';
     for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
@@ -964,8 +1233,7 @@ caja-04	Estante C</textarea>
       tctx.drawImage(previewCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
       const record = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        ts: Date.now(),
-        kind, caption,
+        ts: Date.now(), kind, caption,
         density: density(),
         raster: b64FromBytes(state.raster),
         w: state.w, h: state.h,
@@ -1005,6 +1273,7 @@ caja-04	Estante C</textarea>
     const box = $('history');
     box.innerHTML = '';
     $('historyEmpty').hidden = rows.length > 0;
+    $('historyVals').textContent = rows.length ? `${rows.length} kept` : 'nothing kept';
     for (const row of rows) {
       const card = document.createElement('div');
       card.className = 'card';
@@ -1034,8 +1303,7 @@ caja-04	Estante C</textarea>
     try {
       say(`reprinting ${row.kind} from history`);
       setStatus('reprinting…', 'busy');
-      const raster = bytesFromB64(row.raster);
-      await printOnce(raster, { density: row.density || 3 });
+      await printOnce(bytesFromB64(row.raster), { density: row.density || 4 });
       setStatus('connected and authenticated', 'on');
       say('reprint done');
     } catch (err) {
@@ -1065,8 +1333,6 @@ caja-04	Estante C</textarea>
     for (const tab of ['tabText', 'tabImage', 'tabLabel', 'tabBatch']) {
       $(tab).className = $(tab).id === 'tab' + mode[0].toUpperCase() + mode.slice(1) ? 'primary' : '';
     }
-    /* the halftone control only applies to photographs */
-    $('ditherMode').disabled = mode !== 'image';
     render();
   }
   $('tabText').onclick = () => setMode('text');
@@ -1108,19 +1374,24 @@ caja-04	Estante C</textarea>
 
   /* --------------------------------------------------------------- wiring */
 
-  ['textInput', 'widthSel', 'threshold', 'invert', 'density', 'fontSize', 'textAlign', 'fontFace',
-   'autoLevels', 'brightness', 'contrast', 'rotate', 'ditherMode', 'sharpen',
-   'labelTitle', 'labelSubtitle', 'codeKind', 'codeText', 'codeEcc', 'labelBorder', 'labelCut',
-   'tearMm', 'batchInput', 'batchCopies', 'batchStagger'].forEach((id) => {
+  /* content + global controls that simply re-render */
+  ['textInput', 'fileInput', 'widthSel', 'threshold', 'invert', 'density', 'autoLevels',
+   'brightness', 'contrast', 'rotate', 'ditherMode', 'sharpen', 'copiesInput',
+   'labelTitle', 'labelSubtitle', 'codeKind', 'codeText', 'codeEcc',
+   'batchInput', 'batchCopies', 'batchStagger'].forEach((id) => {
     const el = $(id);
     if (!el) return;
     el.addEventListener('input', render);
     el.addEventListener('change', render);
   });
+
+  /* the two style scopes manage themselves, so they are bound separately */
+  bindTextStyle();
+  bindLabelStyle();
+
   window.addEventListener('resize', () => render());
   window.addEventListener('online', () => $('offlineNote').classList.remove('show'));
   window.addEventListener('offline', () => $('offlineNote').classList.add('show'));
-
   if (!navigator.onLine) $('offlineNote').classList.add('show');
 
   if (!FP.bleAvailable()) {
@@ -1140,6 +1411,7 @@ caja-04	Estante C</textarea>
     showFailure('The page and its scripts are out of step',
       'Missing: ' + missingApi.join(', ') + '. Your browser is holding an older script than ' +
       'this page expects. Reload the page — a pull-to-refresh is enough.');
+    $('logDetails').open = true;
   }
 
   /* Offline install: the worker caches the app so it runs with no network at all. */

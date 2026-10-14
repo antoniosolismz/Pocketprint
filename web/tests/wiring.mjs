@@ -125,13 +125,77 @@ if (wiringList) {
   check('the wiring list is not empty', ids.length > 15, String(ids.length));
 }
 
-/* every label input is wired to re-render, or it silently does nothing */
-const labelControls = ['labelTitle', 'labelSubtitle', 'codeKind', 'codeText', 'codeEcc',
-  'labelBorder', 'labelCut', 'tearMm', 'batchInput', 'batchCopies', 'batchStagger',
-  'ditherMode', 'sharpen', 'rotate', 'fontFace', 'textAlign'];
+/* Controls come in two flavours: ones that simply re-render, and the two style scopes, which
+ * maintain themselves. Both must be complete or a control silently does nothing. */
+const plainControls = ['textInput', 'widthSel', 'threshold', 'invert', 'density', 'autoLevels',
+  'brightness', 'contrast', 'rotate', 'ditherMode', 'sharpen', 'copiesInput',
+  'labelTitle', 'labelSubtitle', 'codeKind', 'codeText', 'codeEcc',
+  'batchInput', 'batchCopies', 'batchStagger'];
 const wiredText = wiringList ? wiringList[1] : '';
-const unwired = labelControls.filter((id) => !wiredText.includes(`'${id}'`));
-check('every control re-renders when changed', unwired.length === 0, JSON.stringify(unwired));
+check('every plain control re-renders when changed',
+  plainControls.every((id) => wiredText.includes(`'${id}'`)),
+  JSON.stringify(plainControls.filter((id) => !wiredText.includes(`'${id}'`))));
+
+/* -------------------------------------- 2c. two style scopes, one label style */
+console.log('\n== style scopes ==');
+check('the text scope has its own controls',
+  ['textFace', 'textSize', 'textAlign'].every((id) => declared.has(id) && inline.includes(`'${id}'`)));
+check('the text scope is separate from the label scope',
+  /style\.text\[key\]/.test(inline) && /style\.label\[key\]/.test(inline));
+check('text jobs read the text scope',
+  /const size = style\.text\.size/.test(inline) && /style\.text\.align/.test(inline));
+
+/* One table drives both label panes, so they cannot drift apart. */
+const labelRows = [...inline.matchAll(/\['(\w+)', '(select|check|number)', '(\w+)', '(\w+)'\]/g)]
+  .map((m) => ({ field: m[1], kind: m[2], label: m[3], batch: m[4] }));
+const EXPECTED_FIELDS = ['Face', 'Align', 'TitleSize', 'SubtitleSize', 'Border', 'Cut', 'Tear'];
+check('the label style table exists', labelRows.length === EXPECTED_FIELDS.length,
+  `${labelRows.length} rows: ${JSON.stringify(labelRows.map((r) => r.field))}`);
+check('every label control in the markup is in the table',
+  EXPECTED_FIELDS.every((f) => labelRows.some((r) => r.label === 'label' + f)));
+check('every batch control in the markup is in the table',
+  EXPECTED_FIELDS.every((f) => labelRows.some((r) => r.batch === 'batch' + f)));
+check('both panes offer the same fields',
+  labelRows.every((r) => r.label.replace('label', '') === r.batch.replace('batch', '')),
+  JSON.stringify(labelRows));
+for (const row of labelRows) {
+  check(`${row.label} / ${row.batch} both exist in the markup`,
+    declared.has(row.label) && declared.has(row.batch));
+}
+check('the label style is one object shared by both tabs',
+  /style\.label\[key\] = readField/.test(inline) && /mirrorLabelStyle\(\)/.test(inline));
+check('batch builds its sheet from the same spec builder',
+  /const base = labelSpecFromForm\(\)/.test(inline));
+check('label jobs no longer read the text tab controls',
+  !/fontFace/.test(inline) && !/\$\('textAlign'\)\.value/.test(inline),
+  'the page still reaches for the old text-tab controls');
+
+/* ---------------------------------- 2d. collapsed groups keep their state visible */
+console.log('\n== collapsed groups show their state ==');
+const summaryIds = [...html.matchAll(/class="gvals" id="([^"]+)"/g)].map((m) => m[1]);
+check('the groups have summary spans', summaryIds.length >= 6, JSON.stringify(summaryIds));
+const unwritten = summaryIds.filter((id) => !inline.includes(`$('${id}').textContent`));
+check('every summary span is actually written by the page', unwritten.length === 0,
+  JSON.stringify(unwritten));
+check('the summaries carry live values, not static labels',
+  /\$\('qualityVals'\)\.textContent = `density \$\{density\(\)\}/.test(inline) &&
+  /\$\('previewSummary'\)\.textContent = /.test(inline));
+check('the preview sticks to the top while you edit',
+  /class="sticky-preview"/.test(html) && /\.sticky-preview \{ position: sticky/.test(html));
+check('the printer group folds away once connected',
+  /\$\('printerDetails'\)\.open = false/.test(inline));
+check('diagnostics open themselves when something fails',
+  /\$\('logDetails'\)\.open = true/.test(inline));
+check('every group is a native details element (no JS needed to open one)',
+  (html.match(/details class="group"/g) || []).length >= 6,
+  String((html.match(/details class="group"/g) || []).length));
+
+/* ---------------------------------- 2e. the threshold reaches every mode */
+console.log('\n== the threshold is no longer dead outside image mode ==');
+check('crisp modes use the slider instead of a hardcoded 128',
+  /thresholdBits\(pixels, w, h, threshold\(\)\)/.test(inline));
+check('the copy says which direction is darker',
+  /higher = darker/.test(html) && !/lower = darker/.test(html));
 
 /* ------------------------------------------------- 2b. the page does no layout maths */
 console.log('\n== the page does not compute positions itself ==');

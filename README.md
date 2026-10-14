@@ -42,6 +42,28 @@ Plus: live progress with packet count and ETA, the printer's own battery and pap
 the header (it broadcasts it every two seconds; this used to sit unread in the log), a
 local reprint history, and a copyable log for when something misbehaves.
 
+### How the settings are scoped
+
+Two style scopes, deliberately:
+
+- **Text** — face, size and alignment for text jobs only.
+- **Label** — face, alignment, title and subtitle sizes, border, cut guide and tear-off. This
+  is **one object shared by the Label and Batch tabs**, because a batch is the label template
+  applied to a list; editing it from either tab changes both. Two separate label styles would
+  be the same confusion in the other direction.
+
+Everything else belongs to the printer or the paper rather than to the content, so it stays
+global: density and threshold (ink), width and copies (paper).
+
+The page is a set of collapsible groups, and **each collapsed summary shows its current
+values** — `Print quality — density 4 · threshold 128`. Collapsing hides the controls, never
+the state, so you can read the whole configuration without opening anything. The preview is
+sticky while you edit, and the printer group folds itself away once connected.
+
+The **threshold** applies to every mode, not just images: it decides where the line between
+ink and paper falls, so raising it makes photographs darker *and* text bolder. (The old copy
+said "lower = darker", which was backwards.)
+
 Everything is client-side: `web/` is a directory of static files, no build step, no backend.
 Web Bluetooth needs a secure origin from a phone, which is why it is served over HTTPS.
 
