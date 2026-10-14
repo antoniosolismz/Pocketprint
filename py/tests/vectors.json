@@ -1,0 +1,286 @@
+{
+ "crc": [
+  {
+   "data": "ea",
+   "crc": 23652
+  },
+  {
+   "data": "63a7f231d41b79",
+   "crc": 59930
+  },
+  {
+   "data": "250971357f4266e7fa",
+   "crc": 52356
+  }
+ ],
+ "auth": [
+  {
+   "challenge": "bb280c24adae3a2f96e4",
+   "mac": "cb365353dcec",
+   "low": "333303586DEFAB77CF4D",
+   "high": "80C46B9616CE93DD04E0"
+  },
+  {
+   "challenge": "6bc2ad57bbb879ceee98",
+   "mac": "f3218f989745",
+   "low": "DF1CEF39B133477781C5",
+   "high": "44AA934F05DD13F896B3"
+  },
+  {
+   "challenge": "7a6f76fbe5663fecbccb",
+   "mac": "054d4e52ff14",
+   "low": "1EC27586750E55B92E0B",
+   "high": "A9E7FBBABFCC0D947EE3"
+  },
+  {
+   "challenge": "d726b16cd23d1b9ba5c1",
+   "mac": "e55bfc7106e1",
+   "low": "30C90F6B979D4EB7B26E",
+   "high": "118603A868FA359EF587"
+  },
+  {
+   "challenge": "acee1279fd8c74258807",
+   "mac": "68726bb68029",
+   "low": "7A7586B38C8CB94F4A5A",
+   "high": "3984F9016B57EBB996B7"
+  },
+  {
+   "challenge": "6033ddead4d83c0ab47b",
+   "mac": "2462fc0ee50f",
+   "low": "3A2F448D88E3C66E926E",
+   "high": "083A10503B69B0488874"
+  }
+ ],
+ "frames": [
+  {
+   "name": "hardware_info",
+   "hex": "5a0100000000000000000000"
+  },
+  {
+   "name": "handshake",
+   "hex": "5a0a02030405060708090a0b"
+  },
+  {
+   "name": "app_check",
+   "hex": "5a0babababababababababab"
+  },
+  {
+   "name": "move_paper",
+   "hex": "5a0382000300000000000000"
+  },
+  {
+   "name": "print_status_start",
+   "hex": "5a0412340002000000000000"
+  },
+  {
+   "name": "print_status_finish",
+   "hex": "5a0400030101000000000000"
+  },
+  {
+   "name": "data_frame",
+   "hex": "550180ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00"
+  }
+ ],
+ "raster": [
+  {
+   "name": "alternating",
+   "width": 8,
+   "height": 1,
+   "pixels": [
+    0,
+    255,
+    0,
+    255,
+    0,
+    255,
+    0,
+    255
+   ],
+   "threshold": 128,
+   "dither": false,
+   "packed": "aa"
+  },
+  {
+   "name": "all_white",
+   "width": 8,
+   "height": 1,
+   "pixels": [
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255
+   ],
+   "threshold": 128,
+   "dither": false,
+   "packed": "00"
+  },
+  {
+   "name": "all_black",
+   "width": 8,
+   "height": 1,
+   "pixels": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "threshold": 128,
+   "dither": false,
+   "packed": "ff"
+  },
+  {
+   "name": "two_bytes",
+   "width": 16,
+   "height": 1,
+   "pixels": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255
+   ],
+   "threshold": 128,
+   "dither": false,
+   "packed": "ff00"
+  },
+  {
+   "name": "gradient",
+   "width": 16,
+   "height": 2,
+   "pixels": [
+    0,
+    8,
+    16,
+    24,
+    32,
+    40,
+    48,
+    56,
+    64,
+    72,
+    80,
+    88,
+    96,
+    104,
+    112,
+    120,
+    128,
+    136,
+    144,
+    152,
+    160,
+    168,
+    176,
+    184,
+    192,
+    200,
+    208,
+    216,
+    224,
+    232,
+    240,
+    248
+   ],
+   "threshold": 128,
+   "dither": false,
+   "packed": "ffff0000"
+  },
+  {
+   "name": "flat_gray_disabled",
+   "width": 8,
+   "height": 1,
+   "pixels": [
+    127,
+    127,
+    127,
+    127,
+    127,
+    127,
+    127,
+    127
+   ],
+   "threshold": 128,
+   "dither": false,
+   "packed": "ff"
+  },
+  {
+   "name": "flat_gray_enabled",
+   "width": 8,
+   "height": 1,
+   "pixels": [
+    127,
+    127,
+    127,
+    127,
+    127,
+    127,
+    127,
+    127
+   ],
+   "threshold": 128,
+   "dither": true,
+   "packed": "aa"
+  },
+  {
+   "name": "checker",
+   "width": 16,
+   "height": 2,
+   "pixels": [
+    0,
+    255,
+    0,
+    255,
+    0,
+    255,
+    0,
+    255,
+    0,
+    255,
+    0,
+    255,
+    0,
+    255,
+    0,
+    255,
+    255,
+    0,
+    255,
+    0,
+    255,
+    0,
+    255,
+    0,
+    255,
+    0,
+    255,
+    0,
+    255,
+    0,
+    255,
+    0
+   ],
+   "threshold": 128,
+   "dither": true,
+   "packed": "aaaa5555"
+  }
+ ]
+}

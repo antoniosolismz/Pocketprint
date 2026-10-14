@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pocket Print — a printer app that minds its own business</title>
+<style>
+  :root {
+    --bg: #0e0f11;
+    --panel: #16181c;
+    --panel-2: #1c1f24;
+    --line: #2a2e35;
+    --ink: #e9eaec;
+    --dim: #9aa0a8;
+    --accent: #e8e2d4;
+    --go: #7fd1a8;
+    --warn: #e8b46a;
+    --bad: #e07a6a;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 18px 16px 48px;
+    max-width: 720px;
+    margin: 0 auto;
+    -webkit-text-size-adjust: 100%;
+  }
+  header { margin-bottom: 18px; }
+  h1 { font-size: 20px; letter-spacing: -0.01em; margin: 0 0 4px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--dim); margin: 0 0 10px; font-weight: 600; }
+  p.sub { color: var(--dim); margin: 0; font-size: 13.5px; }
+  section {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; margin-bottom: 14px;
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .row > * { flex: 1 1 auto; }
+  label.field { display: block; margin-bottom: 10px; font-size: 13px; color: var(--dim); }
+  label.field span { display: block; margin-bottom: 5px; }
+  input[type=number], input[type=text], textarea, select {
+    width: 100%; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px 10px; font: inherit;
+  }
+  textarea { min-height: 84px; font-family: var(--mono); font-size: 13px; resize: vertical; }
+  input[type=range] { width: 100%; accent-color: var(--go); }
+  button {
+    background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 9px; padding: 11px 14px; font: inherit; font-weight: 600;
+    cursor: pointer; min-height: 44px;
+  }
+  button:hover:not(:disabled) { border-color: #3a3f47; }
+  button:disabled { opacity: 0.42; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: #14161a; border-color: var(--accent); }
+  button.ghost { background: transparent; }
+  button.danger { border-color: #513630; color: var(--bad); }
+  .status { display: flex; align-items: center; gap: 9px; font-size: 13.5px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: 0 0 auto; }
+  .dot.on { background: var(--go); box-shadow: 0 0 8px rgba(127,209,168,.5); }
+  .dot.busy { background: var(--warn); }
+  .dot.err { background: var(--bad); }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--dim); margin-top: 8px; word-break: break-all; }
+  pre.log {
+    font-family: var(--mono); font-size: 11px; line-height: 1.45; color: #b9c0c8;
+    background: #101216; border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px; max-height: 190px; overflow: auto; margin: 10px 0 0; white-space: pre-wrap;
+  }
+  .preview-wrap { display: flex; justify-content: center; background: #f4f2ee; border-radius: 10px; padding: 12px; }
+  canvas#preview { max-width: 100%; height: auto; image-rendering: pixelated; display: block; }
+  .hint { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  .kbd { font-family: var(--mono); background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; font-size: 11.5px; }
+  .tag { font-size: 11px; color: var(--dim); border: 1px solid var(--line); border-radius: 99px; padding: 2px 8px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 420px) { .grid2 { grid-template-columns: 1fr; } }
+  details summary { cursor: pointer; color: var(--dim); font-size: 12.5px; }
+  .smallprint { font-size: 12px; color: var(--dim); }
+  .switch { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink); }
+  .switch input { width: 18px; height: 18px; accent-color: var(--go); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pocket Print</h1>
+  <p class="sub">Talks straight to your thermal printer over Bluetooth. No account, no cloud, no telemetry — the page never opens a network connection.</p>
+</header>
+
+<section>
+  <h2>Printer</h2>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">not connected</span></div>
+  <div class="meta" id="deviceMeta"></div>
+  <div class="row" style="margin-top:12px">
+    <button class="primary" id="connectBtn">Connect</button>
+    <button class="ghost" id="disconnectBtn" disabled>Disconnect</button>
+  </div>
+  <div class="switch" style="margin-top:10px">
+    <input type="checkbox" id="showAll">
+    <label for="showAll">List every Bluetooth device, not just known printer names</label>
+  </div>
+  <p class="hint">Known families: LX-D*, DL-P*, DL-T*, ZH-P*, TD-1*, T02, ITW*, SWS-*, AH-M*.</p>
+</section>
+
+<section>
+  <h2>What to print</h2>
+  <div class="row" style="margin-bottom:12px">
+    <button id="tabText" class="primary">Text</button>
+    <button id="tabImage">Image</button>
+    <button class="ghost" id="tabTest">Test page</button>
+  </div>
+
+  <div id="paneText">
+    <label class="field"><span>Text</span>
+      <textarea id="textInput">Hello from Pocket Print.
+
+This printer makes a lovely racket.
+No data left this phone.</textarea>
+    </label>
+  </div>
+
+  <div id="paneImage" hidden>
+    <label class="field"><span>Image</span>
+      <input type="file" id="fileInput" accept="image/*">
+    </label>
+    <p class="hint">Images are processed in this page only. For phone photos, use the camera option in your file picker.</p>
+  </div>
+
+  <div id="paneTest" hidden>
+    <p class="hint" style="margin-top:0">A calibration sheet: a rule you can measure, an alignment frame, and a grey ramp, so you can pick the right print width for your model.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Print settings</h2>
+  <div class="grid2">
+    <label class="field"><span>Print width (dots)</span>
+      <select id="widthSel">
+        <option value="384" selected>384 — most 58 mm models</option>
+        <option value="400">400 — 50 mm label models</option>
+        <option value="576">576 — 80 mm models</option>
+        <option value="240">240 — narrow 15 mm label models</option>
+        <option value="200">200 — smallest pocket units</option>
+      </select>
+    </label>
+    <label class="field"><span>Copies</span>
+      <input type="number" id="copiesInput" value="1" min="1" max="20">
+    </label>
+  </div>
+
+  <label class="field"><span>Darkness / threshold — <b id="thrLabel">128</b> <span class="smallprint">(lower = darker)</span></span>
+    <input type="range" id="threshold" min="1" max="254" value="128">
+  </label>
+
+  <div class="row">
+    <div class="switch"><input type="checkbox" id="dither" checked><label for="dither">Dithering (better photos)</label></div>
+    <div class="switch"><input type="checkbox" id="invert"><label for="invert">Invert (white on black)</label></div>
+  </div>
+
+  <p class="hint">If the grey ramp on the test page band-steps badly, dithering off plus a threshold of ~110–140 usually prints cleanest text.</p>
+</section>
+
+<section>
+  <h2>Preview</h2>
+  <div class="preview-wrap"><canvas id="preview" width="384" height="120"></canvas></div>
+  <div class="meta" id="previewMeta"></div>
+</section>
+
+<section>
+  <h2>Print</h2>
+  <div class="row">
+    <button class="primary" id="printBtn" disabled>Print</button>
+    <button class="ghost" id="feedBtn" disabled>Feed paper</button>
+  </div>
+  <pre class="log" id="log">ready.</pre>
+</section>
+
+<details>
+  <summary>What this page does and does not do</summary>
+  <div class="smallprint" style="margin-top:10px">
+    <p>Everything happens locally in your browser. There is no server behind this page, no analytics script, no account, no storage: close the tab and nothing of yours is kept. The only network request the page can make is the one that loaded these files in the first place.</p>
+    <p>The printer protocol here was reverse engineered from the vendor app <span class="kbd">com.lailaixiong.funnyprint</span> 2.8.1 — see <span class="kbd">PROTOCOL.md</span> in the project for the byte-level details and where each one came from.</p>
+    <p>The vendor app additionally wants location, phone state, camera, advertising ID, the whole Firebase + Facebook analytics stack, and uploads label images and photo-cutout jobs to <span class="kbd">api.dolewa.com</span>. Printing itself needs none of that.</p>
+  </div>
+</details>
+
+<script src="funnyprint.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const logEl = $('log');
+  const lines = [];
+
+  function say(msg) {
+    const stamp = new Date().toTimeString().slice(0, 8);
+    lines.push(`[${stamp}] ${msg}`);
+    if (lines.length > 300) lines.shift();
+    logEl.textContent = lines.join('\n');
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function setStatus(text, cls) {
+    $('statusText').textContent = text;
+    $('dot').className = 'dot' + (cls ? ' ' + cls : '');
+  }
+
+  /* ------------------------------------------------------------ state */
+  const state = {
+    link: null,
+    transport: null,
+    mode: 'text',
+    image: null,          // HTMLImageElement for image mode
+    raster: null,         // Uint8Array
+    width: 384,
+    height: 0,
+    authenticated: false
+  };
+
+  /* ------------------------------------------------------- rasterising */
+  const previewCanvas = $('preview');
+  const previewCtx = previewCanvas.getContext('2d');
+
+  function targetWidth() { return parseInt($('widthSel').value, 10) || 384; }
+  function threshold() { return parseInt($('threshold').value, 10) || 128; }
+  function ditherOn() { return $('dither').checked; }
+
+  function drawSource() {
+    /* Returns {pixels, w, h} in luminance for the current mode. */
+    const w = targetWidth();
+    let src = null, srcW = 0, srcH = 0;
+
+    if (state.mode === 'text') {
+      const text = $('textInput').value || '';
+      const lineCount = text.split('\n').length;
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = 30 + lineCount * 26;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#000';
+      ctx.font = '20px ui-monospace, Menlo, Consolas, monospace';
+      text.split('\n').forEach((line, i) => ctx.fillText(line, 6, 26 + i * 26));
+      src = canvas; srcW = canvas.width; srcH = canvas.height;
+    } else if (state.mode === 'image') {
+      if (!state.image) return null;
+      const scale = w / state.image.width;
+      const h = Math.max(1, Math.round(state.image.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+      ctx.imageSmoothingEnabled = false;   // the vendor app uses filterBitmap(false)
+      ctx.drawImage(state.image, 0, 0, w, h);
+      src = canvas; srcW = w; srcH = h;
+    } else {
+      const canvas = testPage(w);
+      src = canvas; srcW = canvas.width; srcH = canvas.height;
+    }
+
+    const ctx = src.getContext('2d');
+    const data = ctx.getImageData(0, 0, srcW, srcH).data;
+    /* The vendor app uses Color.red as luminance; images are grey already. */
+    let pixels = new Uint8Array(srcW * srcH);
+    for (let i = 0; i < pixels.length; i++) {
+      const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2], a = data[i * 4 + 3];
+      let v = a < 10 ? 255 : Math.round(r * 0.3 + g * 0.59 + b * 0.11);
+      if ($('invert').checked) v = 255 - v;
+      pixels[i] = v;
+    }
+    return { pixels, w: srcW, h: srcH };
+  }
+
+  function testPage(w) {
+    const canvas = document.createElement('canvas');
+    const lineH = 26;
+    canvas.width = w;
+    canvas.height = 300 + lineH;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000';
+    ctx.font = '16px ui-monospace, Menlo, Consolas, monospace';
+    ctx.fillText('POCKET PRINT — CALIBRATION', 6, 20);
+    ctx.font = '12px ui-monospace, Menlo, Consolas, monospace';
+    ctx.fillText(`${w} dots requested · ${new Date().toISOString().slice(0, 10)}`, 6, 38);
+
+    /* alignment frame: if the right edge is missing, the width is too wide */
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 48, w - 3, 40);
+    ctx.fillText('frame = full width', 6, 102);
+
+    /* dot rule every 8 dots, label every 64 */
+    for (let x = 0; x < w; x += 8) {
+      const major = x % 64 === 0;
+      ctx.fillRect(x, 110, major ? 2 : 1, major ? 14 : 7);
+      if (major) ctx.fillText(String(x), x + 2, 140);
+    }
+    ctx.fillText('rule: tick every 8 dots, label every 64', 6, 158);
+
+    /* grey ramp */
+    let y = 172;
+    for (let band = 0; band < 10; band++) {
+      const v = Math.round(band * 255 / 9);
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(6, y, w - 12, 8);
+      y += 10;
+    }
+    ctx.fillStyle = '#000';
+    ctx.fillText('grey ramp 0 -> 255', 6, y + 14);
+
+    /* solid blocks for density check */
+    ctx.fillRect(6, y + 24, (w - 18) / 3, 30);
+    ctx.strokeRect(6 + (w - 18) / 3 + 6, y + 24, (w - 18) / 3, 30);
+    ctx.beginPath();
+    ctx.arc(w - 20 - (w - 18) / 6, y + 39, 14, 0, Math.PI * 2);
+    ctx.stroke();
+    return canvas;
+  }
+
+  function render() {
+    const src = drawSource();
+    if (!src) { $('previewMeta').textContent = 'pick an image to preview'; return; }
+    const thresholdValue = threshold();
+    const bits = ditherOn()
+      ? FunnyPrint.floydSteinberg(src.pixels, src.w, src.h, thresholdValue)
+      : FunnyPrint.thresholdBits(src.pixels, src.w, src.h, thresholdValue);
+    state.raster = FunnyPrint.packBits(bits);
+    state.width = src.w;
+    state.height = src.h;
+
+    /* paint the dithered result, scaled up for a phone screen */
+    const zoom = Math.max(1, Math.floor(Math.min(2.4, 620 / src.w)));
+    previewCanvas.width = src.w * zoom;
+    previewCanvas.height = src.h * zoom;
+    previewCtx.fillStyle = '#fff';
+    previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+    previewCtx.fillStyle = '#111';
+    for (let y = 0; y < src.h; y++) {
+      for (let x = 0; x < src.w; x++) {
+        if (bits[y * src.w + x]) previewCtx.fillRect(x * zoom, y * zoom, zoom, zoom);
+      }
+    }
+    const packets = Math.ceil(state.raster.length / FunnyPrint.PAYLOAD_LEN);
+    $('previewMeta').textContent =
+      `${src.w}×${src.h} dots · ${state.raster.length} bytes · ${packets} Bluetooth packet(s)` +
+      (src.w % 8 ? ' · width is not a multiple of 8, image may shear' : '');
+  }
+
+  /* ------------------------------------------------------------- BLE */
+  $('connectBtn').onclick = async () => {
+    if (!FunnyPrint.bleAvailable()) {
+      setStatus('this browser has no Web Bluetooth — use Chrome or Edge', 'err');
+      say('Web Bluetooth unavailable. Firefox does not support it; Chrome/Edge on Android, or Chrome/Edge/Chromium on desktop do.');
+      return;
+    }
+    setStatus('choosing device…', 'busy');
+    try {
+      const transport = new FunnyPrint.BleTransport(say);
+      const link = new FunnyPrint.PrinterLink(transport, { log: say });
+      await link.connect({ showAll: $('showAll').checked });
+      state.transport = transport;
+      state.link = link;
+      setStatus('handshaking…', 'busy');
+      /* wait for the app-check reply */
+      const started = Date.now();
+      while (!link.session.authenticated && Date.now() - started < 8000) {
+        await new Promise((r) => setTimeout(r, 120));
+      }
+      if (!link.session.authenticated) throw new Error('printer did not accept the handshake');
+      state.authenticated = true;
+      setStatus('connected and authenticated', 'on');
+      $('deviceMeta').textContent =
+        `${transport.device.name || 'unnamed device'} · service ${transport.serviceUuid} · MAC ${link.session.mac} · type ${link.session.deviceType}`;
+      $('printBtn').disabled = false;
+      $('feedBtn').disabled = false;
+      $('disconnectBtn').disabled = false;
+      $('connectBtn').disabled = true;
+    } catch (err) {
+      setStatus('connection failed: ' + (err.message || err), 'err');
+      say('connect error: ' + (err.message || err));
+    }
+  };
+
+  $('disconnectBtn').onclick = async () => {
+    try { if (state.transport) await state.transport.disconnect(); } catch (e) { /* ignore */ }
+    state.link = state.transport = null;
+    state.authenticated = false;
+    setStatus('not connected');
+    $('deviceMeta').textContent = '';
+    $('printBtn').disabled = true;
+    $('feedBtn').disabled = true;
+    $('disconnectBtn').disabled = true;
+    $('connectBtn').disabled = false;
+    say('disconnected');
+  };
+
+  /* ----------------------------------------------------------- print */
+  $('printBtn').onclick = async () => {
+    if (!state.link || !state.raster) return;
+    const copies = Math.max(1, parseInt($('copiesInput').value, 10) || 1);
+    $('printBtn').disabled = true;
+    setStatus('printing…', 'busy');
+    try {
+      say(`print start: ${state.raster.length} bytes, ${copies} copy/copies`);
+      for (let c = 0; c < copies; c++) {
+        if (copies > 1) say(`copy ${c + 1}/${copies}`);
+        await state.link.print(state.raster, 1);
+        const started = Date.now();
+        while (!state.link.printDone && Date.now() - started < 20000) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        if (!state.link.printDone) say('warning: device never confirmed the end of the job');
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      setStatus('connected and authenticated', 'on');
+      say('print finished');
+    } catch (err) {
+      setStatus('print failed: ' + (err.message || err), 'err');
+      say('print error: ' + (err.message || err));
+    } finally {
+      $('printBtn').disabled = false;
+    }
+  };
+
+  $('feedBtn').onclick = async () => {
+    if (!state.transport) return;
+    try {
+      await state.transport.write(FunnyPrint.frames.movePaper(3));
+      say('feed paper');
+    } catch (err) {
+      say('feed error: ' + (err.message || err));
+    }
+  };
+
+  /* ------------------------------------------------------------ tabs */
+  function setMode(mode) {
+    state.mode = mode;
+    $('paneText').hidden = mode !== 'text';
+    $('paneImage').hidden = mode !== 'image';
+    $('paneTest').hidden = mode !== 'test';
+    $('tabText').className = mode === 'text' ? 'primary' : '';
+    $('tabImage').className = mode === 'image' ? 'primary' : '';
+    $('tabTest').className = mode === 'test' ? 'primary' : '';
+    render();
+  }
+  $('tabText').onclick = () => setMode('text');
+  $('tabImage').onclick = () => setMode('image');
+  $('tabTest').onclick = () => setMode('test');
+
+  $('fileInput').onchange = (ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => { state.image = img; render(); };
+    img.onerror = () => say('could not read that image');
+    img.src = URL.createObjectURL(file);
+  };
+
+  ['textInput', 'widthSel', 'threshold', 'dither', 'invert'].forEach((id) => {
+    $(id).addEventListener('input', () => {
+      $('thrLabel').textContent = $('threshold').value;
+      render();
+    });
+  });
+
+  /* keep the preview honest if the window changes */
+  window.addEventListener('resize', () => render());
+
+  if (!FunnyPrint.bleAvailable()) {
+    setStatus('this browser has no Web Bluetooth', 'err');
+    say('Open this page in Chrome or Edge (Android, or a Chromium desktop browser) to talk to the printer.');
+  } else {
+    say('ready. Connect the printer, then print.');
+  }
+  render();
+})();
+</script>
+</body>
+</html>
