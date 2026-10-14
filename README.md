@@ -15,13 +15,29 @@ web/tests/           cross-implementation conformance + end-to-end print test
 
 ## The app (recommended)
 
-`web/index.html` — open it in **Chrome or Edge** (Android, or any Chromium desktop;
-Firefox has no Web Bluetooth). Pick text, an image, or the built-in calibration sheet,
-adjust darkness and dithering, watch the 1:1 preview, press Print.
+**Live at https://print.otelo2.com** — open it in **Chrome or Edge** (Android, or any
+Chromium desktop; Firefox has no Web Bluetooth). Pick text, an image, or the built-in
+calibration sheet, adjust darkness and dithering, watch the 1:1 preview, press Print.
 
-It needs an HTTPS origin to use Web Bluetooth from a phone: either serve it
-(`python3 -m http.server` on localhost, which counts as secure) or publish the folder to
-any static host you control. There is no backend and no build step — three files.
+`web/index.html` + `web/funnyprint.js` are the whole app: two static files, no build step,
+no backend. Web Bluetooth needs a secure origin from a phone, which is why it is served
+over HTTPS rather than opened as a local file.
+
+## Where it runs
+
+| | |
+|---|---|
+| LXC | `136` `pocketprint` on `virtual`, **192.168.0.221** (services block, `onboot 1`) |
+| Web server | nginx, static root `/var/www/pocketprint`, site `pocketprint` |
+| Public name | `print.otelo2.com` → Cloudflare tunnel `virtual` → `http://192.168.0.221:80` |
+| Monitoring | Wazuh agent `024 pocketprint`; `homelab_health.sh` checks both the public name and the LAN origin; Glance "Services" tile |
+| Deploy | `./deploy.sh` — packages `web/`, pushes, then verifies sha256 on the LAN origin **and** through the tunnel |
+
+Updating the app is `./deploy.sh` (add `--dry-run` to see the digests without pushing).
+There is deliberately **no LAN friendly name** for this one: the internal proxy publishes
+`*.home.arpa` over plain HTTP, and Web Bluetooth does not run outside a secure context —
+a `http://pocketprint.home.arpa` route would load a page that cannot print. The public
+HTTPS name works from inside the house too.
 
 ## Desktop CLI
 
