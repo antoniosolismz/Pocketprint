@@ -1,6 +1,6 @@
 # Pocket Print — companion for the "Funny Print" / Dolewa mini thermal printer
 
-[![tests](https://github.com/antoniosolismz/pocketprint/actions/workflows/tests.yml/badge.svg)](https://github.com/antoniosolismz/pocketprint/actions/workflows/tests.yml)
+[![tests](https://github.com/antoniosolismz/Pocketprint/actions/workflows/tests.yml/badge.svg)](https://github.com/antoniosolismz/Pocketprint/actions/workflows/tests.yml)
 
 A replacement for the vendor app `com.lailaixiong.funnyprint` (2.8.1). It speaks the
 printer's Bluetooth protocol directly, prints text, photographs and **labels with QR codes
