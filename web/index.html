@@ -295,9 +295,9 @@ caja-04	Estante C</textarea>
     <span class="smallprint">(lower = darker image)</span></span>
     <input type="range" id="threshold" min="1" max="254" value="128">
   </label>
-  <label class="field"><span>Print head density — <b id="denLabel">3</b>
-    <span class="smallprint">(1–7, the printer's own heat setting; the vendor app defaults to 4)</span></span>
-    <input type="range" id="density" min="1" max="7" value="3">
+  <label class="field"><span>Print head density — <b id="denLabel">4</b>
+    <span class="smallprint">(1–7, the printer's own heat setting; default 4 matches the vendor app)</span></span>
+    <input type="range" id="density" min="1" max="7" value="4">
   </label>
   <div class="switch" style="margin-top:4px">
     <input type="checkbox" id="autoLevels" checked>
@@ -417,7 +417,7 @@ caja-04	Estante C</textarea>
   const previewCtx = previewCanvas.getContext('2d');
   const targetWidth = () => parseInt($('widthSel').value, 10) || 384;
   const threshold = () => parseInt($('threshold').value, 10) || 128;
-  const density = () => parseInt($('density').value, 10) || 3;
+  const density = () => parseInt($('density').value, 10) || 4;
   const FONT_STACK = {
     mono: 'ui-monospace, Menlo, Consolas, monospace',
     sans: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
@@ -518,6 +518,7 @@ caja-04	Estante C</textarea>
       width: targetWidth(),
       title: $('labelTitle').value,
       subtitle: $('labelSubtitle').value,
+      align: $('textAlign').value,
       border: $('labelBorder').checked,
       cutGuide: $('labelCut').checked,
       tearMm: parseInt($('tearMm').value, 10) || 0,
@@ -528,11 +529,18 @@ caja-04	Estante C</textarea>
     return spec;
   }
 
-  /* Measure with the real font so the plan matches what gets drawn. */
-  function measureFor(size, face) {
+  /* Measure with the real font so the plan matches what gets drawn. Bold and size both
+   * matter: measuring a subtitle with the title's bold 30 px made it wrap early. */
+  function measureFor(size, bold) {
     const probe = document.createElement('canvas').getContext('2d');
-    probe.font = `bold ${size}px ${face}`;
+    probe.font = `${bold ? 'bold ' : ''}${size}px ${FONT_STACK[$('fontFace').value] || FONT_STACK.mono}`;
     return (s) => probe.measureText(s).width;
+  }
+  function measureCtx() {
+    return {
+      measure: measureFor(Label.DEFAULTS.titleSize, true),
+      measureSub: measureFor(Label.DEFAULTS.subtitleSize, false),
+    };
   }
 
   /* Draw a plan (one label or a whole sheet) into a canvas at 1:1 dots. */
@@ -549,40 +557,29 @@ caja-04	Estante C</textarea>
 
     const face = FONT_STACK[$('fontFace').value] || FONT_STACK.mono;
 
-    const drawOne = (plan) => {
-      const top = plan.y || 0;
-      if (plan.border) {
+    for (const plan of sheet.labels) {
+      const placed = Label.absoluteLayout(plan);
+      if (placed.border) {
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#000';
-        ctx.strokeRect(plan.border.x + 1, top + plan.border.y + 1, plan.border.w - 2, plan.border.h - 2);
+        ctx.strokeRect(placed.border.x + 1, placed.border.y + 1,
+          placed.border.w - 2, placed.border.h - 2);
       }
-      for (const block of plan.blocks) {
-        if (block.kind === 'text') {
-          let y = top + block.y;
-          for (const line of block.lines) {
-            ctx.font = `${line.emphasis ? 'bold ' : ''}${line.size}px ${face}`;
-            ctx.textAlign = o.align || $('textAlign').value;
-            const pad = plan.spec.padding;
-            const x = ctx.textAlign === 'center' ? W / 2
-              : ctx.textAlign === 'right' ? W - pad : pad;
-            const baseline = y + line.height - Math.round(line.height * 0.28);
-            if (line.text) ctx.fillText(line.text, x, top + baseline);
-            y += line.height;
-          }
-        } else if (block.bitmap) {
-          const bm = block.bitmap;
-          const x0 = Math.floor((W - bm.w) / 2);
-          const y0 = top + block.y;
-          for (let row = 0; row < bm.h; row++) {
-            for (let col = 0; col < bm.w; col++) {
-              if (bm.bits[row * bm.w + col]) ctx.fillRect(x0 + col, y0 + row, 1, 1);
-            }
+      for (const t of placed.texts) {
+        if (!t.text) continue;
+        ctx.font = `${t.emphasis ? 'bold ' : ''}${t.size}px ${face}`;
+        ctx.textAlign = t.align;
+        ctx.fillText(t.text, t.x, t.y);
+      }
+      for (const c of placed.codes) {
+        const bm = c.bitmap;
+        for (let row = 0; row < bm.h; row++) {
+          for (let col = 0; col < bm.w; col++) {
+            if (bm.bits[row * bm.w + col]) ctx.fillRect(c.x + col, c.y + row, 1, 1);
           }
         }
       }
-    };
-
-    for (const plan of sheet.labels) drawOne(plan);
+    }
 
     /* cut guides: dashed rule across the seam, and a scissors-ish marker */
     if ($('labelCut').checked) {
@@ -613,7 +610,7 @@ caja-04	Estante C</textarea>
     }
     const expanded = [];
     for (const item of items) for (let c = 0; c < copies; c++) expanded.push(item);
-    return Label.planSheet(expanded, { measure: measureFor(base.titleSize || 30, FONT_STACK[$('fontFace').value]) });
+    return Label.planSheet(expanded, measureCtx());
   }
 
   /* --------------------------------------------------------------- the pipeline */
@@ -622,9 +619,7 @@ caja-04	Estante C</textarea>
     /* Returns {canvas, mode} for whatever is selected. Label and batch are drawn from a
      * plan; everything else is a canvas that goes through the image pipeline. */
     if (state.mode === 'label') {
-      const plan = Label.planLabel(labelSpecFromForm(), {
-        measure: measureFor(Label.DEFAULTS.titleSize, FONT_STACK[$('fontFace').value]),
-      });
+      const plan = Label.planLabel(labelSpecFromForm(), measureCtx());
       const sheet = { labels: [plan], height: plan.totalHeight, cutYs: [], width: plan.width, warnings: plan.warnings };
       return { canvas: drawPlan(sheet), crisp: true, warnings: plan.warnings, meta: `${plan.blocks.length} block(s)`, heightMm: plan.heightMm };
     }

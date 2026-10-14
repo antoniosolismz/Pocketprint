@@ -125,6 +125,26 @@ const wiredText = wiringList ? wiringList[1] : '';
 const unwired = labelControls.filter((id) => !wiredText.includes(`'${id}'`));
 check('every control re-renders when changed', unwired.length === 0, JSON.stringify(unwired));
 
+/* ------------------------------------------------- 2b. the page does no layout maths */
+console.log('\n== the page does not compute positions itself ==');
+/* The batch bug was a coordinate added twice in the page's drawing code, which no module
+ * test could see. The rule that prevents a repeat: the page draws what the planner gives it
+ * and never touches a plan's own offsets. */
+check('the page uses the planner for absolute placement',
+  /Label\.absoluteLayout\(/.test(inline));
+check('the page never reads plan.y (all offsets come from the planner)',
+  !/\bplan\.y\b/.test(inline), 'plan.y appears in the page');
+check('the page never adds a label offset to a baseline',
+  !/top\s*\+\s*(line|baseline)/.test(inline));
+check('the planner exports absoluteLayout', (() => {
+  const label = readFileSync(join(web, 'label.js'), 'utf8');
+  return /absoluteLayout/.test(label) && /absoluteLayout,/.test(label);
+})());
+/* the density default the user asked for, matching the vendor app */
+check('the density slider defaults to 4', /id="density"[^>]*value="4"/.test(html));
+check('the density readout starts at 4', /id="denLabel">4</.test(html));
+check('the density fallback in code is 4', /parseInt\(\$\('density'\)\.value, 10\) \|\| 4/.test(inline));
+
 /* ------------------------------------------------- 3. the offline shell */
 console.log('\n== the offline copy covers the app ==');
 const sw = readFileSync(join(web, 'sw.js'), 'utf8');

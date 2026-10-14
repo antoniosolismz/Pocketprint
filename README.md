@@ -88,6 +88,29 @@ either (it passes a width down from JavaScript per template). So:
 Ticks on the sheet are 8 dots apart, labelled every 64 dots. If the frame lands exactly
 on both edges at 384, you are set.
 
+## What the paper caught
+
+Three defects that no test could have found before printing, in the order the paper revealed them:
+
+1. **Clipped text.** "…a lovely rack" instead of "…a lovely racket." Each line was drawn at a
+   fixed size and never measured against the page, so everything past ~31 characters vanished
+   mid-word. Text is now wrapped against the real printable width.
+2. **A photo printed as black mush.** A night photograph came out as dense grain with the
+   shadows crushed together. A dark source plus no tone curve plus a 1-bit head leaves shadow
+   detail nowhere to go, and no amount of thresholding recovers what the histogram never had.
+   Hence auto-levels, brightness and contrast, applied *before* halftoning.
+3. **Half of a batch printed, with the cut guides in the right places.** The page placed text
+   itself, at `plan.y + baseline` — where `baseline` already included `plan.y`. The first label
+   on a sheet sits at y = 0, so a single label looked perfect; labels 2, 3 and 4 slid down by
+   one label-height each, and half of a four-label batch printed off the bottom of the paper.
+   The guides were computed absolutely and were correct, which is what made the symptom so
+   confusing.
+
+The fix for (3) was structural, not local: **all placement arithmetic moved into
+`label.js#absoluteLayout`**, where it is tested, and the page draws what it is handed and never
+adds an offset of its own. `wiring.mjs` now enforces that the page contains no layout maths, so
+this class of bug cannot come back quietly.
+
 ## What was verified, and how
 
 Six test suites, ~334 checks. Run them all:
@@ -109,16 +132,18 @@ python3 web/tests/verify-codes.py          # needs opencv + python-barcode
 - `web/tests/codes.mjs` — 49 checks: Code 128 is asserted **byte-for-byte against
   python-barcode** for fifteen payloads (single digits, odd digit runs, punctuation that
   forces a charset switch), plus QR structure, integer module snapping and geometry guards.
-- `web/tests/render.mjs` — 60 checks: each halftone's character (Atkinson keeps pure black
-  and pure white; Bayer is periodic with period 8), sharpen, rotation, and the **label
-  planner's geometry** — that blocks do not overlap, do not exceed 384 dots, that a long
-  title wraps rather than being clipped, and that an impossible QR degrades to a warning
-  instead of a crash.
-- `web/tests/wiring.mjs` — 52 checks: the page is loaded the way a *browser* would
+- `web/tests/render.mjs` — 74 checks: each halftone's character (Atkinson keeps pure black
+  and pure white; Bayer is periodic with period 8), sharpen, rotation, the **label planner's
+  geometry** — blocks do not overlap, nothing exceeds 384 dots, a long title wraps rather than
+  being clipped, an impossible QR degrades to a warning instead of a crash — and
+  **absolute placement**, which is the batch bug in §"What the paper caught": on a multi-label
+  sheet every label's text must sit inside its own band.
+- `web/tests/wiring.mjs` — 59 checks: the page is loaded the way a *browser* would
   (a `vm` sandbox with no `module`, scripts in tag order), every `$('id')` is checked against
-  the markup, the service worker is checked to pre-cache the whole shell, and the page is
-  checked to contain **no off-origin URLs and no fetch/XHR/WebSocket calls at all**. This
-  suite exists because three wiring bugs got past every other suite.
+  the markup, the service worker is checked to pre-cache the whole shell, the page is checked
+  to contain **no off-origin URLs and no fetch/XHR/WebSocket calls at all**, and the page is
+  checked to do **no layout arithmetic of its own** (that rule is what the batch bug broke).
+  This suite exists because four wiring bugs got past every other suite.
 - `web/tests/verify-codes.py` — the independent half: it renders the bitmaps the app would
   send, decodes the QRs with **OpenCV's detector**, and compares Code 128 against
   **python-barcode**. 10/10 QR bitmaps decode, including the ones inside a composed label.

@@ -196,6 +196,62 @@ check('a pipe splits title and subtitle',
 check('every item inherits the base spec',
   Label.itemsFromList('a\nb', { width: 384, titleSize: 30 }).every((i) => i.titleSize === 30));
 
+console.log('\n== absolute placement (the batch bug) ==');
+/* The reported bug: on a multi-label sheet, every label after the first printed one full
+ * label-height too low, so half of a four-label batch fell off the paper. The first label was
+ * at y = 0 and looked perfect, which is exactly why it survived a single-label test. */
+const sheet4 = Label.planSheet(['caja-01', 'caja-02', 'caja-03', 'caja-04']);
+const laid = sheet4.labels.map((l) => Label.absoluteLayout(l));
+check('every label gets a layout', laid.length === 4);
+check('each label\'s text sits inside its own band', laid.every((p) =>
+  p.texts.every((t) => t.y >= p.y && t.y <= p.bottom),
+), JSON.stringify(laid.map((p) => [p.y, p.bottom, p.texts.map((t) => t.y)])));
+check('no label\'s text intrudes into the next label', laid.every((p, i) =>
+  i === laid.length - 1 || p.texts.every((t) => t.y < laid[i + 1].y),
+), JSON.stringify(laid.map((p) => [p.y, p.texts.map((t) => t.y)])));
+check('the last label\'s text is inside the sheet', (() => {
+  const last = laid[laid.length - 1];
+  return last.texts.every((t) => t.y <= sheet4.height);
+})());
+check('text advances by one line height per line', (() => {
+  const p = laid[0];
+  if (p.texts.length < 2) return true;
+  return p.texts[1].y - p.texts[0].y === p.texts[0].height;
+})());
+check('labels further down the sheet get correspondingly lower text', (() => {
+  const first = laid[0].texts[0].y, last = laid[3].texts[0].y;
+  return last > first && last - first > sheet4.height * 0.5;
+})(), `${laid[0].texts[0].y} -> ${laid[3].texts[0].y}`);
+
+console.log('\n== absolute placement: codes and borders ==');
+const withQr = Label.planSheet([
+  { title: 'a', code: { kind: 'qr', text: 'https://otelo2.com' } },
+  { title: 'b', code: { kind: 'qr', text: 'https://otelo2.com' } },
+]);
+const qrLaid = withQr.labels.map((l) => Label.absoluteLayout(l));
+check('each QR is placed inside its own label', qrLaid.every((p) =>
+  p.codes.every((c) => c.y >= p.y && c.y + c.bitmap.h <= p.bottom),
+), JSON.stringify(qrLaid.map((p) => [p.y, p.bottom, p.codes.map((c) => c.y)])));
+check('QRs are horizontally centred', qrLaid.every((p) =>
+  p.codes.every((c) => Math.abs((c.x + c.bitmap.w / 2) - 192) <= 1)));
+const borderedLaid = Label.absoluteLayout(
+  Label.planSheet([{ title: 'a', border: true }, { title: 'b', border: true }]).labels[1]);
+check('a border is offset by its own label, not the sheet', borderedLaid.border.y >= borderedLaid.y,
+  `${borderedLaid.border.y} vs ${borderedLaid.y}`);
+check('a border stays inside its label',
+  borderedLaid.border.y + borderedLaid.border.h <= borderedLaid.bottom + 2,
+  `${borderedLaid.border.y + borderedLaid.border.h} vs ${borderedLaid.bottom}`);
+
+console.log('\n== alignment ==');
+for (const [align, expect] of [['left', 'low'], ['center', 'mid'], ['right', 'high']]) {
+  const p = Label.absoluteLayout(Label.planLabel({ title: 'x', align }));
+  const x = p.texts[0].x;
+  check(`align ${align} puts the x where it should be`,
+    expect === 'low' ? x === 16 : expect === 'mid' ? x === 192 : x === 384 - 16, String(x));
+}
+check('alignment comes from the spec, so the plan is self-contained',
+  Label.absoluteLayout(Label.planLabel({ title: 'x', align: 'center' })).texts[0].align === 'center');
+
 console.log('\n== the tear-off path ==');
 const withTear = Label.planLabel({ title: 'x', tearMm: 10 });
 const noTear = Label.planLabel({ title: 'x', tearMm: 0 });

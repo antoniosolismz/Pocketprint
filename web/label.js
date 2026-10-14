@@ -34,6 +34,7 @@
     titleSize: 30,        // dots, roughly 11 pt on this head
     subtitleSize: 22,
     lineSpacing: 1.3,     // multiple of the font size
+    align: 'left',        // left | center | right
     cutGuide: true,       // dashed tear line above each label
     tearMm: 6,            // blank feed after a label so it can be torn off cleanly
     border: false,        // box around the label
@@ -148,6 +149,57 @@
     };
   }
 
+  /* Absolute positions for everything in a label, ready to draw.
+   *
+   * This exists because of a bug worth remembering: the page used to place text itself, at
+   * `plan.y + baseline`, where `baseline` already included `plan.y`. The first label on a
+   * sheet sits at y = 0 and looked perfect; every label after it landed one full label-height
+   * too low, so half of a four-label batch printed off the bottom of the paper while the cut
+   * guides (computed here, absolutely) stayed in the right places.
+   *
+   * So all placement arithmetic lives here, where it is tested, and the page just draws what
+   * it is given — it never adds an offset of its own.
+   */
+  function absoluteLayout(plan) {
+    const top = plan.y || 0;
+    const pad = plan.spec.padding;
+    const align = plan.spec.align || 'left';
+    const texts = [];
+    const codes = [];
+
+    for (const block of plan.blocks) {
+      if (block.kind === 'text') {
+        let y = top + block.y;
+        for (const line of block.lines) {
+          texts.push({
+            text: line.text,
+            x: align === 'center' ? plan.width / 2 : align === 'right' ? plan.width - pad : pad,
+            y: y + line.height - Math.round(line.height * 0.28),   // alphabetic baseline
+            height: line.height,
+            size: line.size,
+            emphasis: line.emphasis,
+            align,
+          });
+          y += line.height;
+        }
+      } else if (block.bitmap) {
+        const bm = block.bitmap;
+        codes.push({ bitmap: bm, x: Math.floor((plan.width - bm.w) / 2), y: top + block.y });
+      }
+    }
+
+    return {
+      y: top,
+      height: plan.height,
+      bottom: top + plan.height,
+      border: plan.border ? {
+        x: plan.border.x, y: top + plan.border.y, w: plan.border.w, h: plan.border.h,
+      } : null,
+      texts,
+      codes,
+    };
+  }
+
   /* Stack N labels into one continuous sheet, with a cut guide between them.
    * `items` are specs; a bare string becomes a title-only label. */
   function planSheet(items, ctx) {
@@ -194,6 +246,6 @@
 
   return {
     DOTS_PER_MM, WIDTH, MM, dotsToMm, planLabel, planSheet, itemsFromList,
-    approximateMeasure, DEFAULTS,
+    absoluteLayout, approximateMeasure, DEFAULTS,
   };
 }));
