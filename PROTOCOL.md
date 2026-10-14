@@ -1,164 +1,175 @@
-# Funny Print / Dolewa BLE thermal printer protocol
+# Funny Print / Dolewa BLE thermal printer protocol (LX-D02 family)
 
 Reverse engineered from `Funny Print_com.lailaixiong.funnyprint_20260907_40Ubz.apk`
 (package `com.lailaixiong.funnyprint`, versionName 2.8.1, versionCode 20260907).
 
-Every claim below is derived from the app's own code, not from guesswork. Evidence
-anchors are given as `decomp.js:<line>` (Hermes bytecode decompilation of
-`assets/index.android.bundle`) or `jadx:<path>` (Java layer).
+Evidence anchors are `decomp.js:<line>` (Hermes bytecode decompilation of
+`assets/index.android.bundle`) or `jadx:<path>` (Java layer). Sections marked
+**cross-checked** were additionally verified against `cicloid/printable`, an independent
+hardware-validated reimplementation of this same printer family — see §10, which also
+records the two bugs that cross-check found in the first version of this document.
 
 ---
 
 ## 1. Transport
 
-- **BLE**, discovered by the app at connect time (no hardcoded UUIDs anywhere in the APK —
-  verified: the only UUID-shaped strings in the bundle are iOS simulator container paths).
-- Characteristic selection is **substring matching on the UUID**
-  (`decomp.js:563680` / `f24043`, `f24044`):
-  - write target: first characteristic whose lowercase UUID **contains `ffe1`**
-  - notify source: first characteristic whose lowercase UUID **contains `ffe2`**
-  - If either is missing the app throws `ffe1 characteristic not found` /
-    `ffe2 characteristic not found` (`decomp.js:560444`).
-- MTU is requested as **128** after services are discovered (`decomp.js:560120`).
-- **All writes are `writeCharacteristicWithoutResponseForDevice`, with the payload
-  base64-encoded** (`decomp.js:564738`, method `sendData`).
-- Notifications arrive base64-encoded; the app decodes with `Buffer.from(value,'base64')`
-  (`decomp.js:559019`).
+- **BLE.** The vendor service is **`0xFFE6`** — **cross-checked**, and it is *not* the
+  `0xFFE0` of the classic JDY/HM-10 module family:
+  - service: `0000ffe6-0000-1000-8000-00805f9b34fb`
+  - write (host → printer): `0000ffe1-…` — **write without response**
+  - notify (printer → host): `0000ffe2-…`
+- The APK hardcodes no UUID; it discovers characteristics by **substring match**
+  (`uuid.includes('ffe1')` / `('ffe2')`, `decomp.js:563680`, `f24043`, `f24044`) and
+  throws `ffe1 characteristic not found` when they are absent. Matching on those
+  substrings is the portable rule.
+- These printers advertise **no distinctive service UUID**, so they cannot be filtered by
+  service during a scan. Discovery is: advertised local name prefix, then confirm `0xFFE1`
+  and `0xFFE2` after connecting. (A browser additionally has to *declare* the service in
+  `optionalServices` before it may look at it — that is a Web Bluetooth rule, not a device
+  one, and forgetting it is what produced our first connection failure.)
+- **MTU:** a raster packet is 100 bytes, so a single ATT write needs MTU ≥ 103.
+  **cross-checked** — neither the vendor app (`requestMTU(128)`, `decomp.js:560145`) nor
+  the independent implementation requests one explicitly; CoreBluetooth and Chrome
+  negotiate a large MTU automatically and the printer accepts the writes. No MTU handling
+  is needed on those stacks.
+- The stock app base64-encodes every write (`decomp.js:564738`); raw bytes are accepted
+  (our transports send raw, the independent one does too).
 
 ## 2. Device name whitelist
 
-`allowedNames` (`decomp.js:559198`, from `setDeviceType`):
+`allowedNames` (`decomp.js:559198`, from `setDeviceType`): `TD-11308`, `T02`, `LX-D01`,
+`LX-D02`, `LX-D2`, `LX-D03`…`LX-D09`, `DL-P01`, `LX-D02-TEST`, `ITW14302`, `SWS-PT1`,
+`AH-M2`, `ZH-P06`, `LX-D002`…`LX-D009`. A **`LX`** name prefix is the practical filter for
+this family (`LX-D02` is a 58 mm, 203 dpi, 384-dot unit).
+
+## 3. Frames, host → printer — **cross-checked**
+
+Control frames begin `0x5A`; raster frames begin `0x55`, so the receiver distinguishes them
+on the first byte. Lengths are exact:
+
+| Command | Opcode | Length | Bytes |
+|---|---|---|---|
+| Hello | `5A 01` | 12 | `5A 01` + ten zero bytes |
+| Auth challenge | `5A 0A` | 12 | `5A 0A` + 10 random bytes |
+| Auth reply | `5A 0B` | 12 | `5A 0B` + 10 response bytes |
+| Set density | `5A 0C` | 3 | `5A 0C <level 1..7>` |
+| Print start | `5A 04` | 6 | `5A 04 <count:u16be> 00 00` |
+| Raster | `55` | 100 | `55 <index:u16be> <96 bytes> 00` |
+| Print end | `5A 04` | 6 | `5A 04 <count:u16be> 01 00` |
+
+- **The raster frame carries the PACKET INDEX (0-based), not a byte offset.** The byte
+  offset is `index * 96` and is used only to slice the bitmap locally. `[99]` is a constant
+  `0x00` terminator — not a checksum.
+- `count` is the number of raster packets, `ceil(rows / 2)`: each packet holds **two print
+  lines of 48 bytes** (384 dots / 8).
+- Density defaults to 3 and is sent before the job opens; it drives print energy.
+- **There is no feed opcode for this model.** Paper advance is printing blank rows. (The
+  stock app's `5A 03 82 …` "move paper" is only sent for "TB"-type printers,
+  `decomp.js:562525`, and is not part of this protocol.)
+
+## 4. Frames, printer → host (notifications on `0xFFE2`)
+
+All begin `0x5A`; unknown opcodes are ignored, not fatal. **cross-checked**
+
+| Opcode | Meaning | Fields |
+|---|---|---|
+| `5A 01` | hello | MAC at bytes `[4..10]` |
+| `5A 02` | status | `[2]` battery %, `[3]` out of paper (inverted sense), `[4]` charging/charged, `[5]` overheat, `[6]` low battery, `[7]` density |
+| `5A 03` | ready | (the stock app re-sends the print header on this) |
+| `5A 04` | print result | `[4] == 1` → job closed |
+| `5A 05` | **lost packet** | `[2..4]` u16be index, **1-based** — rewind and resend from `index − 1`, and clear any hold |
+| `5A 06` | **finished** | `[2..4]` packet count |
+| `5A 07` | cooldown | back off ~100 ms, do **not** rewind |
+| `5A 08` | hold | send nothing until a `5A 05` or `5A 06` arrives |
+| `5A 0A` | challenge reply | payload is junk — do not depend on it |
+| `5A 0B` | auth result | `[2] == 01` ok |
+
+## 5. Authentication
+
+Not a security boundary: the host issues the challenge **and** computes the answer, keyed
+on the MAC the printer itself just disclosed. It is an app lock, not a secret.
 
 ```
-TD-11308, T02, LX-D01, LX-D02, LX-D2, LX-D03, LX-D3, LX-D04, LX-D4, LX-D05, LX-D5,
-LX-D06, LX-D6, LX-D07, LX-D7, LX-D08, LX-D8, LX-D09, LX-D9, DL-P01, LX-D02-TEST,
-ITW14302, SWS-PT1, AH-M2, ZH-P06, LX-D002, LX-D003, LX-D004, LX-D005, LX-D006,
-LX-D007, LX-D008, LX-D009
-```
-
-A secondary list (`checkWhiteList`) is the subset up to `AH-M2`. Device *type* is taken
-from the hardware-info response, not the name (`decomp.js:563687`).
-
-## 3. Frame format, host → printer
-
-Command frames are **fixed 12 bytes**, magic **`0x5A`** at `[0]`, command at `[1]`
-(`decomp.js:563455` = `sendHandshake`, `563380` = `sendAPPCheck`, etc.).
-
-| cmd | name | bytes |
-|-----|------|-------|
-| `0x0A` | handshake | `5A 0A [10 random bytes 1..254]` |
-| `0x0B` | app check | `5A 0B [highCrc 10 bytes]` |
-| `0x01` | hardware info request | `5A 01` + 10 zero bytes |
-| `0x03` | move paper / start | `5A 03 82 00 03 00 00` + 5 zero bytes |
-| `0x04` | print status header | `5A 04 [totalPkg u16 BE] [flag] [printNum] ` + 6 zero bytes |
-
-- `totalPkg` = `ceil(len(mainBuffer) / 96)` (`decomp.js:562929`).
-- `flag` = `0` to open a print job (`decomp.js:562993`), `1` to finalise/abort it
-  (`endPrint` `decomp.js:562736`, `cancelPrint` `decomp.js:562680`).
-- `printNum` = copies; the app sends 1 for the normal single-print path.
-- `0x03` is only sent for "TB" printer types (`decomp.js:562525`), otherwise the app
-  goes straight to `innerPrint` (the `0x04` frame).
-
-### Data frames — 100 bytes, magic `0x55`
-
-```
-55 [offset u16 BE] [96 bytes of raster data] 00
-```
-
-`offset = packetIndex * 96`, taken from the printer's own request index
-(`decomp.js:563415`–`563459`). The 96-byte payload is **uncompressed 1-bit raster**,
-straight out of `mainBuffer`. `mainBuffer` is zero-padded to a multiple of 96 before
-sending (`alignMainBuffer`, `decomp.js:562826`).
-
-## 4. Frame format, printer → host
-
-`[0] == 0x5A` required, then command at `[1]` (`decomp.js:559026`), dispatched via a
-jump table over 1..11 (`decomp.js:559031`).
-
-| cmd | meaning | parsed fields |
-|-----|---------|---------------|
-| `0x01` | hardware info | `[4..9]` = MAC (6 bytes, `decomp.js:563662`), `[10]` = deviceType (`decomp.js:563683`) |
-| `0x03` | printer ready for data | → app calls `innerPrint` / re-sends `0x04` (`decomp.js:564141`) |
-| `0x04` | print job result | `[4] == 1` → job done, state → Idle (`decomp.js:564270`–`564294`) |
-| `0x05` | **request packet N** | `[2..3]` = u16 BE, **1-based**; app sets `sentPkg = N - 1` (`decomp.js:564315`) |
-| `0x06` | print end | `[2..3]` = totalPkg echo, `[4]` = respCount (`decomp.js:564363`) |
-| `0x08` | pause | → state Paused (`decomp.js:564413`) |
-| `0x0A` | handshake reply | `[2..11]` must equal the app's `lowCrc` (`decomp.js:563977`) |
-| `0x0B` | app check result | `[2]` = `01` success / `00` fail (`decomp.js:564029`) |
-
-## 5. Authentication (challenge / response)
-
-Not real security — a fixed algorithm both sides run, keyed on the MAC the printer
-itself discloses in the `0x01` reply. Implemented in `checkCrc` (`decomp.js:565137`).
-
-```
-random[10]              = 10 bytes, each randint(1,254)          # sent in the 0x0A frame
-mac_hex                 = 12 lowercase hex chars from [4..9] of 0x01 reply
+random[10]  = 10 bytes, each randint(1,254)          # sent in the 5A 0A frame
+mac_hex     = 12 lowercase hex chars from [4..10] of the 5A 01 reply
 
 for i in 0..9:
-    msg  = hex2(random[i]) + mac_hex          # 7 bytes
-    crc  = CRC16_XMODEM(msg)
-    h    = crc.to_hex().padStart(4,'0').upper()
-    lowCrc  += h[2:4]      # last two nibbles
-    highCrc += h[0:2]      # first two nibbles
+    crc = CRC16_XMODEM(challenge[i] || mac)          # 7 bytes
+    high += crc[0:2]      # first two hex nibbles  → this is what the printer wants back
+    low  += crc[2:4]      # last two nibbles       → the vendor app compares the 5A 0A reply to this
 
-expect 0x0A reply [2..11].hex().upper() == lowCrc   # printer proves it knows the MAC
-then send 0x0B with highCrc as 10 raw bytes         # app proves it knows the MAC
-expect 0x0B reply [2] == 0x01
+send 5A 0B with high as 10 raw bytes
+expect 5A 0B 01
 ```
 
-> Note on the CRC: the app's `crc16xmodem` accumulates in an unmasked 32-bit int rather
-> than masking to 16 bits per step. Simulating it exactly (int32, `>>` sign-propagating)
-> reproduces textbook CRC-16/XMODEM results for every 7-byte input tested (20 000 random
-> vectors, 0 mismatches), so a plain CRC-16/XMODEM implementation is correct here.
-> The accumulator stays below 2^31 for this input length.
+- The vendor app compares the `5A 0A` payload against `low` and only then sends the reply
+  (`decomp.js:563984`). **The independent implementation ignores that payload entirely and
+  sends the reply regardless**, which is more robust: a format difference cannot deadlock
+  the handshake. We do the same and merely log the comparison.
+- A useful property (**cross-checked**): with an all-zero challenge, all ten CRC high bytes
+  are identical (`crc16_xmodem(00 || mac) >> 8`), because each byte is an independent
+  one-byte challenge over the same MAC. The printer accepts it — further proof the
+  exchange authenticates nothing.
+- The stock app's `crc16xmodem` accumulates in an unmasked 32-bit int instead of masking
+  each step. Simulating it exactly (int32, sign-propagating `>>`) reproduces textbook
+  CRC-16/XMODEM for every 7-byte input tested (20 000 random vectors, 0 mismatches), so a
+  plain CRC-16/XMODEM is correct here.
 
-## 6. Print sequence
+## 6. Print sequence — **cross-checked**
 
 ```
-connect → discover services (MTU 128)
-  → 0x01 hardware info request           ← MAC + deviceType
-  → 0x0A handshake (10 random bytes)     ← 0x0A lowCrc  (verify)  → 0x0B app check
-                                         ← 0x0B result 0x01
-                                             [state = Idle, ready]
-
-print(config):
-  raster  = 1-bit bitmap, base64         (see §7)
-  totalPkg = ceil(len(raster)/96)
-  → 0x04 {totalPkg, flag=0, printNum}
-  ← 0x05 request N     (repeat)          → 0x55 data frame for packet N-1
-  ← 0x06 print end {totalPkg, respCount}
-  → 0x04 {totalPkg, flag=1, printNum}    ← 0x04 [4]==1  → Idle
+connect → discover services (MTU negotiates itself)
+  → 5A 01 hello                       ← 5A 01 with the MAC        [we know the MAC]
+  → 5A 0A challenge                   ← 5A 0A (payload ignored)
+  → 5A 0B auth reply                  ← 5A 0B 01                  [authenticated]
+  → 5A 0C density
+  → 5A 04 <count> 00 00  print start
+  → 55 <index> <96B> 00  … one per packet, ~15 ms apart
+      ← 5A 05 <n>   rewind to n−1 and resume   (also the resume signal after a hold)
+      ← 5A 07       back off 100 ms, keep the index
+      ← 5A 08       hold: send nothing
+      ← 5A 06 <count>   finished
+  → 5A 04 <count> 01 00  print end
 ```
 
-Flow control is strict ping-pong: the printer asks for packet N, the host sends exactly
-that packet and nothing more. `PRINT_TIMEOUT` in the app is 15000 ms.
+`0x05` doubles as the resume signal after a hold. A hold is exited only by `0x05` or by
+`0x06`; there is no timer-based exit — sending into a hold is what causes the overrun the
+hold exists to prevent. Inter-packet delay recommendations: 15 ms.
 
 ## 7. Raster format
 
-Produced by the Java module `cn.lailaixiong.funnyprint.util.ImageUtil`
-(`jadx:.../util/ImageUtil.java`):
+From the Java module `cn.lailaixiong.funnyprint.util.ImageUtil` (and **cross-checked**):
 
-- `bitmapToBinaryBuffer(bitmap, threshold)` — `ImageUtil.java:273`
-  - takes the **red channel** as luminance,
-  - **1 = black** (`red < threshold`),
-  - **MSB-first bit packing, continuous across the whole image** (no per-row byte
-    padding — so the width should be a multiple of 8),
-  - no header, no per-row length prefix.
-- `ditherImageToBinaryBuffer(bitmap, threshold=128)` — `ImageUtil.java:174`
-  - grayscale extract → Floyd–Steinberg dithering → same packing → base64.
-  - Diffusion is the classic 7/3/5/1 / 16 kernel with error clamped to 0..255
-    (`ImageUtil.java:230`–`262`).
-- `scaleAndCropImage` uses `filterBitmap=false` (nearest-neighbour) for crisp text,
-  centre-cropped to the target height (`ImageUtil.java:57`).
+- **384 dots/row → 48 bytes/row**, **MSB first** (bit 7 = leftmost pixel), **1 = black**,
+  zero-padded when the height is odd. Two rows per raster packet.
+- `bitmapToBinaryBuffer(bitmap, threshold)` (`ImageUtil.java:273`) takes the **red channel**
+  as luminance and packs continuously across the image with **no per-row padding** — keep
+  the width a multiple of 8 (384) and the two agree trivially.
+- `ditherImageToBinaryBuffer(bitmap, threshold=128)` (`ImageUtil.java:174`) is
+  grayscale → Floyd–Steinberg (7/3/5/1 kernel, error clamped 0..255) → same packing.
+- `scaleAndCropImage` uses `filterBitmap=false` (nearest neighbour), centre-cropped.
 
-Print width is supplied by JS at call time, not fixed in the constants; the stock app's
-templates use 50 mm paper, which at 203 dpi is 400 dots — but this family ships 384-dot
-and 576-dot models too. Treat width as a per-device setting (see README calibration).
+## 8. What printing actually needs
 
-## 8. Through this stick, nothing else is needed
+The whole local path is BLE only. No server call is required to print. (The stock app also
+talks to `api.dolewa.com`, `img.dolewa.com`, `img.lailaixiong.com.cn` and
+`laixueimg.huyosy.com` for accounts, templates and cloud image processing — none of it
+involved in driving the printer.)
 
-The whole local printing path is BLE-only. No server call is required to print — the
-protocol above is complete. (The stock app additionally talks to `api.dolewa.com`,
-`img.dolewa.com`, `img.lailaixiong.com.cn` and `laixueimg.huyosy.com`; that traffic is
-about accounts, templates and cloud image processing, not about driving the printer.)
+## 9. Why the first version of this document was wrong
+
+Two mistakes, both caught by cross-checking against `cicloid/printable`:
+
+1. **Service UUID.** The first version guessed the write characteristic (`0xFFE1`) but
+   never established the service, and shipped a candidate list that omitted `0xFFE6`. Web
+   Bluetooth may only touch a service the page has declared, so every lookup failed and the
+   connection died with `GATT Error: Not supported`. **Symptom to remember:** that error at
+   connect time on this printer family means "the service you asked for is not there", not
+   "Bluetooth is broken".
+2. **Raster packet field.** The first version wrote the byte offset (`index * 96`) into the
+   raster frame. The device expects the packet **index**. Packet 0 looked identical either
+   way, so the handshake and the first packet would have succeeded and everything after it
+   would have been garbage — the worst kind of bug to find on hardware.
+
+Everything else in the earlier reading (frame magics, the handshake, the auth derivation,
+the raster packing) was confirmed byte for byte by the independent implementation.

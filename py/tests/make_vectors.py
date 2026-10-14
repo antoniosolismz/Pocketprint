@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Emit protocol/raster test vectors from the Python reference implementation.
 
-The JavaScript core (web/funnyprint.js) is then asserted against this file by
-web/tests/conformance.mjs, so both implementations are pinned to the same bytes.
+web/tests/conformance.mjs asserts the JavaScript core against this file, so both
+implementations stay pinned to the same bytes.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from funnyprint import raster as R  # noqa: E402
 def main() -> int:
     out: dict = {"crc": [], "auth": [], "frames": [], "raster": []}
 
-    rng = random.Random(20261013)
+    rng = random.Random(20261014)
     for n in (1, 7, 9):
         data = bytes(rng.randrange(256) for _ in range(n))
         out["crc"].append({"data": data.hex(), "crc": P.crc16_xmodem(data)})
@@ -34,16 +34,15 @@ def main() -> int:
         out["auth"].append({"challenge": challenge.hex(), "mac": mac, "low": low, "high": high})
 
     out["frames"] = [
-        {"name": "hardware_info", "hex": P.hardware_info_frame().hex()},
-        {"name": "handshake", "hex": P.handshake_frame(bytes(range(2, 12))).hex()},
-        {"name": "app_check", "hex": P.app_check_frame("AB" * 10).hex()},
-        {"name": "move_paper", "hex": P.move_paper_frame().hex()},
-        {"name": "print_status_start", "hex": P.print_status_frame(0x1234, 0, 2).hex()},
-        {"name": "print_status_finish", "hex": P.print_status_frame(3, 1, 1).hex()},
-        {"name": "data_frame", "hex": P.data_frame(0x0180, bytes([0xFF]) * 96).hex()},
+        {"name": "hello", "hex": P.hello_frame().hex()},
+        {"name": "challenge", "hex": P.challenge_frame(bytes(range(2, 12))).hex()},
+        {"name": "auth_reply", "hex": P.auth_reply_frame("AB" * 10).hex()},
+        {"name": "density", "hex": P.density_frame(3).hex()},
+        {"name": "print_start", "hex": P.print_status_frame(0x1234, P.FLAG_START).hex()},
+        {"name": "print_end", "hex": P.print_status_frame(3, P.FLAG_FINISH).hex()},
+        {"name": "raster", "hex": P.data_frame(1, bytes([0xFF]) * 96).hex()},
     ]
 
-    # raster vectors: raw luminance -> packed bits
     cases = [
         ("alternating", 8, 1, [0, 255, 0, 255, 0, 255, 0, 255], 128, False),
         ("all_white", 8, 1, [255] * 8, 128, False),
@@ -58,8 +57,7 @@ def main() -> int:
         img = Image.new("L", (w, h))
         img.putdata(pixels)
         if dither:
-            bits = R.floyd_steinberg(img, threshold)
-            packed = R.pack_bits(bits)
+            packed = R.pack_bits(R.floyd_steinberg(img, threshold))
         else:
             packed = R.pack_bits([p < threshold for p in pixels])
         out["raster"].append({

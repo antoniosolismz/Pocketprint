@@ -1,84 +1,84 @@
 {
  "crc": [
   {
-   "data": "ea",
-   "crc": 23652
+   "data": "59",
+   "crc": 52188
   },
   {
-   "data": "63a7f231d41b79",
-   "crc": 59930
+   "data": "4cf6a9b7a3b54d",
+   "crc": 11619
   },
   {
-   "data": "250971357f4266e7fa",
-   "crc": 52356
+   "data": "df9ee2dd8a791ee5a0",
+   "crc": 12449
   }
  ],
  "auth": [
   {
-   "challenge": "bb280c24adae3a2f96e4",
-   "mac": "cb365353dcec",
-   "low": "333303586DEFAB77CF4D",
-   "high": "80C46B9616CE93DD04E0"
+   "challenge": "faaa81cba196a16851ca",
+   "mac": "6e6755ecf37d",
+   "low": "E374AD0F5B925B82C36E",
+   "high": "886247692969297406D1"
   },
   {
-   "challenge": "6bc2ad57bbb879ceee98",
-   "mac": "f3218f989745",
-   "low": "DF1CEF39B133477781C5",
-   "high": "44AA934F05DD13F896B3"
+   "challenge": "1d621a04dbbb0d5f4765",
+   "mac": "3dc0edd86009",
+   "low": "5CD418EB6C7627538590",
+   "high": "646A7D78B30053D97D73"
   },
   {
-   "challenge": "7a6f76fbe5663fecbccb",
-   "mac": "054d4e52ff14",
-   "low": "1EC27586750E55B92E0B",
-   "high": "A9E7FBBABFCC0D947EE3"
+   "challenge": "e670f9621822f5e425d5",
+   "mac": "8b7dd1a18d7e",
+   "low": "3E99AC012EEDC7DDA931",
+   "high": "3409895E2983DB549AB5"
   },
   {
-   "challenge": "d726b16cd23d1b9ba5c1",
-   "mac": "e55bfc7106e1",
-   "low": "30C90F6B979D4EB7B26E",
-   "high": "118603A868FA359EF587"
+   "challenge": "5d0f60d9b1fb230f3503",
+   "mac": "97caf2a3955a",
+   "low": "2652A119AE0CCF529139",
+   "high": "F9734A93B39D4F73D921"
   },
   {
-   "challenge": "acee1279fd8c74258807",
-   "mac": "68726bb68029",
-   "low": "7A7586B38C8CB94F4A5A",
-   "high": "3984F9016B57EBB996B7"
+   "challenge": "858f0201d645e0175f8b",
+   "mac": "fb3ebf9ad9f2",
+   "low": "236D9E1C36369E4203AB",
+   "high": "B94A0BD38BCF73450B8B"
   },
   {
-   "challenge": "6033ddead4d83c0ab47b",
-   "mac": "2462fc0ee50f",
-   "low": "3A2F448D88E3C66E926E",
-   "high": "083A10503B69B0488874"
+   "challenge": "be1acd5c0244011dc394",
+   "mac": "08e9b07dea20",
+   "low": "5D94BE5D428BC0D036E5",
+   "high": "EEEAB2964E3296F38073"
   }
  ],
  "frames": [
   {
-   "name": "hardware_info",
+   "name": "hello",
    "hex": "5a0100000000000000000000"
   },
   {
-   "name": "handshake",
+   "name": "challenge",
    "hex": "5a0a02030405060708090a0b"
   },
   {
-   "name": "app_check",
+   "name": "auth_reply",
    "hex": "5a0babababababababababab"
   },
   {
-   "name": "move_paper",
-   "hex": "5a0382000300000000000000"
+   "name": "density",
+   "hex": "5a0c03"
   },
   {
-   "name": "print_status_start",
-   "hex": "5a0412340002000000000000"
+   "name": "print_start",
+   "hex": "5a0412340000"
   },
   {
-   "name": "print_status_finish",
-   "hex": "5a0400030101000000000000"
+   "name": "print_end",
+   "hex": "5a0400030100"
   },
   {
-   "name": "data_frame",
-   "hex": "550180ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00"
+   "name": "raster",
+   "hex": "550001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00"
   }
  ],
  "raster": [
