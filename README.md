@@ -87,11 +87,19 @@ bugs in this project's first version (the GATT service is `0xFFE6`, and the rast
 carries a packet *index* where we were writing a byte offset). `PROTOCOL.md` §9 records
 both, because the second one would have printed one good packet and then garbage.
 
-**Still not verified against *this* printer.** Everything above proves the two
-implementations agree with each other, with the vendor app's compiled code, and with an
-independent implementation on real hardware — but your unit is the final word. Two things
-may still need adjusting on first contact, and neither is a protocol problem: the print
-width (384 is fixed for this head) and the default density/threshold.
+**Confirmed on an actual LX-D02 (2026-10-14).** Test page, text and a 341-packet photo all
+printed on hardware. The session log confirms the handshake for real: the device answered
+`5A 01` with its MAC, the `5A 0A` reply payload **matched the vendor app's low-CRC check**
+(the one step in this protocol where a wrong guess would have been a locked door rather than
+a garbled page), auth returned ok, and the raster framed at packet indices `0x0000`,
+`0x0001`, … One more thing the paper confirmed: **the first text renderer clipped long lines
+mid-word** — "…a lovely rack" instead of "…a lovely racket." — because each line was drawn
+at a fixed size and never measured against the page. Text is now wrapped against the real
+printable width, with the measurement tested in the browser.
+
+**What is still unknown** is small: an undocumented 12-byte `0x0C` frame the printer emitted
+once (recorded, not acted on — see `PROTOCOL.md` §4), and whether the 60 ms pacing cap is
+the right ceiling for the longest jobs.
 
 If it does misbehave, the ground truth is an HCI snoop log: Developer options → "Enable
 Bluetooth HCI snoop log", print once with the vendor app, pull `/sdcard/btsnoop_hci.log`,

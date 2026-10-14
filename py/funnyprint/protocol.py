@@ -222,6 +222,7 @@ class PrinterSession:
     finished: bool = False
     job_done: bool = False
     hold: bool = False
+    inter_packet_ms: int = INTER_PACKET_MS  # raised when the printer tells us to hold
     cooldown_until: float = 0.0
     density: int = 3
     status: Optional[dict] = None
@@ -241,6 +242,7 @@ class PrinterSession:
         self.finished = False
         self.job_done = False
         self.hold = False
+        self.inter_packet_ms = INTER_PACKET_MS
         self.cooldown_until = 0.0
         self.density = density or 3
         out: list[bytes] = []
@@ -288,7 +290,11 @@ class PrinterSession:
             RESP_READY: self._on_ready,
         }.get(note.cmd)
         if handler is None:
-            self.log.append(f"unknown command 0x{note.cmd:02X}")
+            # The printer sends frames the vendor app's dispatcher does not handle either
+            # (a 12-byte 0x0C turns up in the wild). Record the bytes, carry on.
+            self.log.append(
+                f"unhandled printer frame 0x{note.cmd:02x} ({len(raw)} bytes) {raw.hex()[:24]} — recorded"
+            )
             return []
         return handler(note, now)
 
@@ -345,7 +351,15 @@ class PrinterSession:
 
     def _on_hold(self, note: Notification, now) -> list[bytes]:
         self.hold = True
-        self.log.append("printer asked us to hold")
+        # A hold means the buffer is full; resuming at the same rate refills it. Back off
+        # for the rest of this job, capped, so a long photo does not stall repeatedly.
+        # Round half up to match the JS core: Python's round() is banker's rounding and
+        # would diverge (15 -> 22 here, 23 there).
+        if self.inter_packet_ms < 60:
+            self.inter_packet_ms = min(int(self.inter_packet_ms * 1.5 + 0.5), 60)
+            self.log.append(f"printer asked us to hold → pacing {self.inter_packet_ms} ms")
+        else:
+            self.log.append("printer asked us to hold")
         return []
 
     def _on_print_result(self, note: Notification, now) -> list[bytes]:

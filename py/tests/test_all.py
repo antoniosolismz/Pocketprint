@@ -243,6 +243,13 @@ def test_flow_control() -> None:
 
     session.on_notification(bytes([0x5A, P.RESP_HOLD]), now=0.0)
     check("hold stops the stream", session.next_stream_frame(0.0) is None)
+    check("a hold makes us pace the rest of the job more slowly",
+          session.inter_packet_ms == 23, f"inter_packet_ms={session.inter_packet_ms}")
+    session.on_notification(bytes([0x5A, P.RESP_HOLD]), now=0.0)
+    check("repeated holds keep backing off", session.inter_packet_ms == 35)
+    for _ in range(6):
+        session.on_notification(bytes([0x5A, P.RESP_HOLD]), now=0.0)
+    check("but the backoff is capped so a job cannot crawl", session.inter_packet_ms == 60)
 
     session.on_notification(bytes([0x5A, P.RESP_LOST_PACKET, 0, 1]), now=0.0)
     check("lost packet 1 rewinds to index 0 and clears the hold",
@@ -265,6 +272,11 @@ def test_out_of_range_and_unknown() -> None:
     first = session.next_stream_frame()
     check("a one-packet job streams exactly one frame", first is not None and first[1:3] == bytes([0, 0]))
     check("nothing to stream past the last packet", session.next_stream_frame() is None)
+    # the printer sends a 12-byte 0x0C that neither the vendor app nor the reference
+    # implementation documents; it must be recorded and tolerated, not fatal
+    session.on_notification(bytes([0x5A, 0x0C] + list(range(1, 11))), now=0.0)
+    check("an unhandled printer frame is recorded with its bytes",
+          any("0x0c" in line and "5a0c" in line for line in session.log), session.log[-1:])
     check("an unknown command is ignored, not fatal",
           session.on_notification(bytes([0x5A, 0x7F])) == []
           and session.on_notification(bytes([0x5A, 0x40, 1, 2, 3])) == [])

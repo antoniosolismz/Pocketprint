@@ -117,6 +117,14 @@
 This printer makes a lovely racket.
 Nothing left the phone.</textarea>
     </label>
+    <label class="field" style="margin-bottom:0"><span>Text size</span>
+      <select id="fontSize">
+        <option value="16">Small — most characters per line</option>
+        <option value="20" selected>Normal</option>
+        <option value="26">Large — labels and titles</option>
+      </select>
+    </label>
+    <p class="hint" style="margin-bottom:0">Long lines wrap to the page width instead of running off the edge.</p>
   </div>
   <div id="paneImage" hidden>
     <label class="field"><span>Image</span>
@@ -224,7 +232,7 @@ Nothing left the phone.</textarea>
     ctx.font = '16px ui-monospace, Menlo, Consolas, monospace';
     ctx.fillText('POCKET PRINT — CALIBRATION', 6, 20);
     ctx.font = '12px ui-monospace, Menlo, Consolas, monospace';
-    ctx.fillText(`${w} dots requested · ${new Date().toISOString().slice(0, 10)}`, 6, 38);
+    ctx.fillText(`${w} dots · density ${density()} · threshold ${threshold()}`, 6, 38);
     ctx.lineWidth = 2; ctx.strokeRect(1, 48, w - 3, 40);
     ctx.fillText('frame = full width', 6, 102);
     for (let x = 0; x < w; x += 8) {
@@ -253,14 +261,23 @@ Nothing left the phone.</textarea>
     const w = targetWidth();
     if (state.mode === 'text') {
       const text = $('textInput').value || '';
-      const count = text.split('\n').length;
+      const size = parseInt($('fontSize').value, 10) || 20;
+      const margin = 6;
+      const lineGap = Math.round(size * 1.3);
+      const probe = document.createElement('canvas').getContext('2d');
+      probe.font = `${size}px ui-monospace, Menlo, Consolas, monospace`;
+      /* Wrap to the printable width. The first version drew each line at a fixed size and
+       * let anything longer fall off the edge of the page, mid-word. */
+      const lines = FunnyPrint.wrapText((s) => probe.measureText(s).width, text, w - margin * 2);
       const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = 30 + count * 26;
+      canvas.width = w;
+      canvas.height = Math.max(lineGap * 2, margin * 2 + lines.length * lineGap);
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, canvas.height);
       ctx.fillStyle = '#000';
-      ctx.font = '20px ui-monospace, Menlo, Consolas, monospace';
-      text.split('\n').forEach((line, i) => ctx.fillText(line, 6, 26 + i * 26));
+      ctx.font = `${size}px ui-monospace, Menlo, Consolas, monospace`;
+      lines.forEach((line, i) =>
+        ctx.fillText(line, margin, margin + (i + 1) * lineGap - Math.round(lineGap * 0.3)));
       return canvas;
     }
     if (state.mode === 'image') {
@@ -291,7 +308,10 @@ Nothing left the phone.</textarea>
       pixels[i] = v;
     }
     const t = threshold();
-    const bits = $('dither').checked
+    /* The calibration sheet is a test of the print head, not of the halftone: dithering
+     * its ruler and grey ramp would show our own pattern instead of the head's response. */
+    const useDither = $('dither').checked && state.mode !== 'test';
+    const bits = useDither
       ? FunnyPrint.floydSteinberg(pixels, w, h, t)
       : FunnyPrint.thresholdBits(pixels, w, h, t);
     state.raster = FunnyPrint.packBits(bits);
@@ -437,7 +457,7 @@ Nothing left the phone.</textarea>
     img.src = URL.createObjectURL(file);
   };
 
-  ['textInput', 'widthSel', 'threshold', 'dither', 'invert', 'density'].forEach((id) => {
+  ['textInput', 'widthSel', 'threshold', 'dither', 'invert', 'density', 'fontSize'].forEach((id) => {
     $(id).addEventListener('input', () => {
       $('thrLabel').textContent = $('threshold').value;
       $('denLabel').textContent = $('density').value;

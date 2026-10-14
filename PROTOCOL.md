@@ -84,6 +84,27 @@ All begin `0x5A`; unknown opcodes are ignored, not fatal. **cross-checked**
 | `5A 0A` | challenge reply | payload is junk — do not depend on it |
 | `5A 0B` | auth result | `[2] == 01` ok |
 
+### What a real LX-D02 does (observed, 2026-10-14)
+
+From a full session on the user's own unit — test page, text, and a 341-packet photo:
+
+- The MAC it reports is `a2ff00000098` — note the `ff00` filler. These units stamp out the
+  same board; do not read anything into it.
+- **`5A 02` is a heartbeat, not a reply.** It arrives unprompted every ~2 seconds for as
+  long as the link is up, including while a job is streaming and while the printer is
+  holding. Nothing needs to be sent in response, and it is a free battery gauge.
+- Battery reads 100% while charging and only dipped to 94% after a 341-packet photo.
+- **`5A 0C`, 12 bytes, is undocumented.** The printer sent it once, mid-session. It is
+  handled by neither the vendor app's dispatcher (§ evidence: `process0x01/02/03/04/05/06/
+  08/0a/0bResp` — there is no `0x0C`) nor the reference implementation. Ours records the
+  bytes and carries on. If it ever starts arriving in bursts, that would be worth a snoop;
+  once, next to a job that printed fine, it is noise.
+- **A long job does hit flow control.** 160 packets: clean. 67 packets: clean. 341 packets
+  (a photo): two holds and two rewinds (`lost packet 115 → 114`, `lost packet 244 → 243`)
+  before finishing normally. This is the buffer filling, and it is why `0x08`/`0x05` are
+  implemented rather than assumed away. See §6 for the pacing response.
+- The whole photo job took ~15 s wall clock, most of it the hold/rewind pauses.
+
 ## 5. Authentication
 
 Not a security boundary: the host issues the challenge **and** computes the answer, keyed
@@ -135,6 +156,12 @@ connect → discover services (MTU negotiates itself)
 `0x05` doubles as the resume signal after a hold. A hold is exited only by `0x05` or by
 `0x06`; there is no timer-based exit — sending into a hold is what causes the overrun the
 hold exists to prevent. Inter-packet delay recommendations: 15 ms.
+
+One rule we added after watching a real 341-packet job stall twice: **a hold means the
+buffer was full, so resume that job more slowly rather than at the same rate.** We grow the
+inter-packet delay by 1.5× on each hold, capped at 60 ms, and reset it when the next job
+opens. Without it, a long photo holds, rewinds, catches up, and holds again every couple of
+hundred packets — which is what the log above shows happening twice before we changed it.
 
 ## 7. Raster format
 

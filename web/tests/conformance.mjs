@@ -235,6 +235,42 @@ check('hold stalled us and the rewind resent packet 0',
   data2.filter((f) => f.slice(0, 6) === '550000').length === 2,
   data2.map((f) => f.slice(0, 6)).join(' '));
 check('the job still completed after the hold', t2.printer.finished === true);
+check('a hold made us pace the rest of the job more slowly',
+  link2.session.interPacketMs > 15,
+  `interPacketMs=${link2.session.interPacketMs}`);
+
+/* --------------------------------------------------------------- wrapping */
+/* The printed text used to run off the edge of the page mid-word, because each line was
+ * drawn at a fixed size and never measured. */
+console.log('\n== text wrapping ==');
+const mono = (s) => s.length * 10;                       // 10 units per character
+const wrapped = FP.wrapText(mono, 'This printer makes a lovely racket.\nNothing left the phone.', 200);
+check('every wrapped line fits the width', wrapped.every((l) => mono(l) <= 200), JSON.stringify(wrapped));
+check('no characters were lost',
+  wrapped.join(' ').replace(/\s+/g, ' ').trim() ===
+  'This printer makes a lovely racket. Nothing left the phone.');
+check('the second sentence starts on its own line',
+  wrapped.indexOf('Nothing left the') === 2, JSON.stringify(wrapped));
+check('a blank line in the input stays blank',
+  FP.wrapText(mono, 'a\n\nb', 200).join('|') === 'a||b');
+const longWord = FP.wrapText(mono, 'supercalifragilisticexpialidocious', 100);
+check('a word longer than the line is broken, not dropped',
+  longWord.length > 1 && longWord.every((l) => l.length <= 10) &&
+  longWord.join('') === 'supercalifragilisticexpialidocious', JSON.stringify(longWord));
+check('wrapping terminates on a single unsplittable character width',
+  FP.wrapText(() => 999, 'ab cd', 1).join('') !== '');
+const realWidth = FP.wrapText((s) => s.length * 12.03, 'This printer makes a lovely racket.', 384 - 12);
+check('the actual printed sentence now wraps to 384 dots',
+  realWidth.every((l) => l.length * 12.03 <= 372) &&
+  realWidth.join(' ').includes('racket.'), JSON.stringify(realWidth));
+
+/* ------------------------------------------------- unhandled printer frames */
+console.log('\n== unrecognised printer frames ==');
+const s3 = new FP.PrinterSession();
+const weird = new Uint8Array([0x5A, 0x0C, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+check('an unknown 12-byte 0x0C frame is tolerated', s3.handle(weird) !== undefined);
+check('and it is recorded with its bytes, not just its opcode',
+  s3.log.some((l) => l.includes('0x0c') && l.includes('5a0c')), JSON.stringify(s3.log));
 
 console.log('\n== wire trace (what goes over BLE) ==');
 transport.sent.forEach((f, i) => console.log(`  ${String(i + 1).padStart(2)}: ${String(f.length / 2).padStart(3)}B  ${f.slice(0, 54)}${f.length > 54 ? '…' : ''}`));

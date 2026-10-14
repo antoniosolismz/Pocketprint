@@ -164,6 +164,7 @@
       this.hold = false;         // 0x08: send nothing until 0x05 or 0x06
       this.cooldownUntil = 0;    // 0x07: back off
       this.density = 3;
+      this.interPacketMs = INTER_PACKET_MS;  // raised when the printer tells us to hold
       this.status = null;
       this.lastAuthCheck = null; // whether the 0x0A payload matched our lowCrc
       this.log = [];
@@ -283,7 +284,16 @@
         }
         case RESP.HOLD: {
           this.hold = true;
-          this.log.push('printer asked us to hold');
+          /* A hold means the printer's buffer is full. Resuming at the same rate just
+           * fills it again, which is how a long photo job ends up stalling every few
+           * hundred packets. Back off for the rest of this job, capped so it cannot
+           * crawl: this is deliberately per-job, not permanent. */
+          if (this.interPacketMs < 60) {
+            this.interPacketMs = Math.min(Math.round(this.interPacketMs * 1.5), 60);
+            this.log.push(`printer asked us to hold → pacing ${this.interPacketMs} ms`);
+          } else {
+            this.log.push('printer asked us to hold');
+          }
           return [];
         }
         case RESP.PRINT_RESULT: {
@@ -297,7 +307,12 @@
           this.log.push('printer ready');
           return [];
         default:
-          this.log.push(`unknown command 0x${note.cmd.toString(16)} (${note.length} bytes)`);
+          /* The printer sends frames neither the vendor app's dispatcher nor the
+           * reference implementation recognises (an 12-byte 0x0C shows up in the wild).
+           * Record the bytes so it is diagnosable, and carry on: every one seen so far
+           * was informational and arrived next to a job that printed fine. */
+          this.log.push(`unhandled printer frame 0x${note.cmd.toString(16).padStart(2, '0')} ` +
+            `(${note.length} bytes) ${bytesToHex(raw || new Uint8Array()).slice(0, 24)} — recorded`);
           return [];
       }
     }
@@ -518,11 +533,11 @@
           }
           const frame = this.session.nextStreamFrame(Date.now());
           if (!frame) {
-            await sleep(this.session.hold ? 50 : INTER_PACKET_MS);
+            await sleep(this.session.hold ? 50 : this.session.interPacketMs);
             continue;
           }
           await this._write(frame);
-          if (this.session.cursor < this.session.totalPkg) await sleep(INTER_PACKET_MS);
+          if (this.session.cursor < this.session.totalPkg) await sleep(this.session.interPacketMs);
         }
         if (this.session.finished) {
           for (const frame of this.session.finishFrames()) await this._write(frame);
@@ -547,6 +562,38 @@
   /* ------------------------------------------------------------- raster */
 
   const DITHER_KERNEL = [[1, 0, 7], [-1, 1, 3], [0, 1, 5], [1, 1, 1]];
+
+  /* Word-wrap to a measured width. Words too long for the line are broken, never
+   * clipped: silently losing the end of a line is the worst way for a printer to fail,
+   * because the output still looks like it worked. */
+  function wrapText(measure, text, maxWidth) {
+    const lines = [];
+    for (const paragraph of String(text).replace(/\r\n?/g, '\n').split('\n')) {
+      if (paragraph.trim() === '') { lines.push(''); continue; }
+      let line = '';
+      for (const original of paragraph.split(/\s+/)) {
+        let word = original;
+        for (;;) {
+          const candidate = line ? line + ' ' + word : word;
+          if (measure(candidate) <= maxWidth) { line = candidate; break; }
+          if (!line) {
+            // A single glyph wider than the page: emit it and move on. Looping here
+            // instead would hang the tab, which is a worse failure than an ugly line.
+            if (word.length === 1) { lines.push(word); word = ''; break; }
+            let cut = word.length - 1;
+            while (cut > 1 && measure(word.slice(0, cut)) > maxWidth) cut--;
+            lines.push(word.slice(0, cut));
+            word = word.slice(cut);
+            continue;
+          }
+          lines.push(line);
+          line = '';
+        }
+      }
+      lines.push(line);
+    }
+    return lines;
+  }
 
   /* pixels: Uint8Array (or array) of luminance, length w*h. 1 = black. */
   function floydSteinberg(pixels, w, h, threshold) {
@@ -600,6 +647,6 @@
     crc16Xmodem, deriveCrcs, hexToBytes, bytesToHex,
     frames, alignRaster, parseNotification,
     PrinterSession, PrinterLink, BleTransport, bleAvailable,
-    floydSteinberg, thresholdBits, packBits, rasterize
+    floydSteinberg, thresholdBits, packBits, rasterize, wrapText
   };
 });

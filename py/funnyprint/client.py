@@ -170,10 +170,10 @@ async def run_job(transport: BleakTransport, session, raster: bytes, density: in
                 break
             frame = session.next_stream_frame(asyncio.get_event_loop().time())
             if frame is None:
-                await asyncio.sleep(0.05 if session.hold else INTER_PACKET_MS / 1000)
+                await asyncio.sleep(0.05 if session.hold else session.inter_packet_ms / 1000)
                 continue
             await transport.write(frame)
-            await asyncio.sleep(INTER_PACKET_MS / 1000)
+            await asyncio.sleep(session.inter_packet_ms / 1000)
 
         if session.finished:
             for frame in session.finish_frames():

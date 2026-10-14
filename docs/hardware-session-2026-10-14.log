@@ -1,0 +1,49 @@
+Pocket Print — first hardware session, 2026-10-14
+Printer: LX-D02 (advertises as "LX-D02"), reported MAC a2ff00000098
+Host: Chrome on Android, page served from https://print.otelo2.com
+
+Kept verbatim as evidence for PROTOCOL.md §4. Note that the repeated
+"status: battery N%" lines are the printer's own 5A 02 heartbeat arriving
+unprompted every ~2 seconds, not something we ask for.
+
+[00:17:46] ready. Connect the printer, then print.
+[00:18:01] selected "LX-D02" (id /4wU8njCa4WGqX7D9Am1Nw==)
+[00:18:01] connected (GATT)
+[00:18:01] services visible: 0000ffe6-0000-1000-8000-00805f9b34fb
+[00:18:01]   0000ffe1-0000-1000-8000-00805f9b34fb []
+[00:18:01]   0000ffe2-0000-1000-8000-00805f9b34fb []
+[00:18:01] subscribed to notifications
+[00:18:01] wired up: write 0000ffe1-0000-1000-8000-00805f9b34fb · notify 0000ffe2-0000-1000-8000-00805f9b34fb
+[00:18:02] device mac=a2ff00000098
+[00:18:02] challenge reply matched lowCrc
+[00:18:02] auth ok
+[00:18:02] ready to print
+[00:18:04]..[00:18:36] status: battery 100%  (16 heartbeats, ~2 s apart, printer-initiated)
+[00:18:36] job open: 160 packet(s), density 3          <- operation 1: calibration page
+[00:18:38] status: battery 100%
+[00:18:40] status: battery 100%
+[00:18:41] printer finished (160 packet(s))
+[00:18:41] job closed
+[00:18:41] job closed by the printer
+[00:18:43]..[00:19:02] status: battery 94%  (heartbeats)
+[00:19:04] job open: 67 packet(s), density 3           <- operation 2: default text
+[00:19:04] unknown command 0xc (12 bytes)              <- undocumented frame; see PROTOCOL.md §4
+[00:19:06] status: battery 94%
+[00:19:07] printer finished (67 packet(s))
+[00:19:07] job closed
+[00:19:07] job closed by the printer
+[00:19:09]..[00:19:40] status: battery 94%  (heartbeats)
+[00:19:42] job open: 341 packet(s), density 3          <- operation 3: photo
+[00:19:44] printer asked us to hold
+[00:19:47] lost packet 115 → rewinding to 114
+[00:19:50] printer asked us to hold
+[00:19:52] lost packet 244 → rewinding to 243
+[00:19:57] printer finished (341 packet(s))
+[00:19:57] job closed
+[00:19:57] job closed by the printer
+[00:20:04] device disconnected
+
+Outcome: all three printed. The paper also showed a bug the log could not:
+the text job clipped "This printer makes a lovely racket." at "rack", because
+the renderer drew fixed-size lines and never measured them against the page
+(measured: 421 px of text into 372 px of printable width). Fixed and wrapped.
