@@ -88,8 +88,8 @@ All begin `0x5A`; unknown opcodes are ignored, not fatal. **cross-checked**
 
 From a full session on the user's own unit — test page, text, and a 341-packet photo:
 
-- The MAC it reports is `a2ff00000098` — note the `ff00` filler. These units stamp out the
-  same board; do not read anything into it.
+- The MAC it reports follows a vendor pattern (`a2ff00…`, redacted here) — note the `ff00`
+  filler. These units stamp out the same board; do not read anything into it.
 - **`5A 02` is a heartbeat, not a reply.** It arrives unprompted every ~2 seconds for as
   long as the link is up, including while a job is streaming and while the printer is
   holding. Nothing needs to be sent in response, and it is a free battery gauge.

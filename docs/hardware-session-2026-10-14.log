@@ -1,5 +1,5 @@
 Pocket Print — first hardware session, 2026-10-14
-Printer: LX-D02 (advertises as "LX-D02"), reported MAC a2ff00000098
+Printer: LX-D02 (advertises as "LX-D02"), reported MAC `a2ff00…` (redacted)
 Host: Chrome on Android, page served from https://print.otelo2.com
 
 Kept verbatim as evidence for PROTOCOL.md §4. Note that the repeated
@@ -14,7 +14,7 @@ unprompted every ~2 seconds, not something we ask for.
 [00:18:01]   0000ffe2-0000-1000-8000-00805f9b34fb []
 [00:18:01] subscribed to notifications
 [00:18:01] wired up: write 0000ffe1-0000-1000-8000-00805f9b34fb · notify 0000ffe2-0000-1000-8000-00805f9b34fb
-[00:18:02] device mac=a2ff00000098
+[00:18:02] device mac=a2ff00… (redacted)
 [00:18:02] challenge reply matched lowCrc
 [00:18:02] auth ok
 [00:18:02] ready to print

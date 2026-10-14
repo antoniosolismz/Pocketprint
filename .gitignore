@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .venv/
+# the real deployment target (host, key, container, IPs) — never commit this
+deploy.local.sh
+.DS_Store

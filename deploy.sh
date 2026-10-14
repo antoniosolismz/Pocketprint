@@ -1,21 +1,46 @@
 #!/usr/bin/env bash
-# Deploy the web app to LXC 136 (pocketprint) and verify what is actually served.
+# Deploy the web app to a container on a Proxmox host and verify what is actually served.
 #
-#   ./deploy.sh            push web/ and verify over LAN + public HTTPS
+#   ./deploy.sh            push web/ and verify over the LAN origin + the public name
 #   ./deploy.sh --dry-run  show what would be pushed, touch nothing
 #
 # The site is a directory of static files behind nginx. There is no build step and no
-# server-side anything, so "deploy" is: copy, then prove the bytes match on both paths
-# (LAN origin and the Cloudflare tunnel).
+# server-side anything, so "deploy" is: copy, then prove the bytes match on both paths.
+#
+# The target is configuration, not code: export the variables below, or copy
+# deploy.local.example.sh to deploy.local.sh (gitignored) and fill it in.
+#
+#   POCKETPRINT_PROXMOX_HOST  ssh target of the Proxmox host    root@proxmox.example
+#   POCKETPRINT_SSH_KEY       ssh private key for that host     ~/.ssh/proxmox_deploy
+#   POCKETPRINT_VMID          container id to push into         136
+#   POCKETPRINT_ORIGIN_IP     LAN address of that container     192.0.2.20
+#   POCKETPRINT_PUBLIC_URL    public HTTPS name                 https://print.example.com
 set -euo pipefail
 
-PROXMOX_HOST="root@192.168.0.2"
-SSH_KEY="$HOME/.ssh/proxmox_hermes"
-VMID=136
-ORIGIN_IP="192.168.0.221"
-PUBLIC_URL="https://print.otelo2.com"
-WEB_DIR="$(cd "$(dirname "$0")" && pwd)/web"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=/dev/null
+[[ -f "$HERE/deploy.local.sh" ]] && . "$HERE/deploy.local.sh"
+
+PROXMOX_HOST="${POCKETPRINT_PROXMOX_HOST:-}"
+SSH_KEY="${POCKETPRINT_SSH_KEY:-}"
+VMID="${POCKETPRINT_VMID:-}"
+ORIGIN_IP="${POCKETPRINT_ORIGIN_IP:-}"
+PUBLIC_URL="${POCKETPRINT_PUBLIC_URL:-}"
+WEB_DIR="$HERE/web"
 REMOTE_TMP="/root/pocketprint-web.tar.gz"
+
+missing=()
+for name in PROXMOX_HOST SSH_KEY VMID ORIGIN_IP PUBLIC_URL; do
+  [[ -n "${!name:-}" ]] || missing+=("POCKETPRINT_${name}")
+done
+if (( ${#missing[@]} )); then
+  echo "deploy.sh needs a target:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  echo >&2
+  echo "Copy deploy.local.example.sh to deploy.local.sh and fill it in, or export those" >&2
+  echo "variables. Nothing was pushed." >&2
+  exit 2
+fi
 
 FILES=(
   index.html

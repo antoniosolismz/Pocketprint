@@ -1,5 +1,5 @@
 Pocket Print — second hardware session, 2026-10-14
-Printer: LX-D02, MAC a2ff00000098, host: Chrome on Android via https://print.otelo2.com
+Printer: LX-D02, MAC `a2ff00…` (redacted), host: Chrome on Android via https://print.otelo2.com
 
 This run was the verification pass for the previous commit's fixes. Both held:
 
@@ -27,7 +27,7 @@ drops from 90.3% to 77.1%.
 [00:57:01]   0000ffe2-0000-1000-8000-00805f9b34fb []
 [00:57:01] subscribed to notifications
 [00:57:01] wired up: write 0000ffe1-0000-1000-8000-00805f9b34fb · notify 0000ffe2-0000-1000-8000-00805f9b34fb
-[00:57:01] device mac=a2ff00000098
+[00:57:01] device mac=a2ff00… (redacted)
 [00:57:01] challenge reply matched lowCrc
 [00:57:01] auth ok
 [00:57:01] ready to print

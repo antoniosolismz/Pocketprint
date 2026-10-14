@@ -1,0 +1,57 @@
+name: tests
+
+# Every suite in this repository, on every push. The point of a test suite is that it runs
+# without being asked, and the badge in the README is only worth having if it reflects this
+# workflow rather than a claim.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  javascript:
+    name: web core and page wiring
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: protocol core against the python reference vectors
+        run: node web/tests/conformance.mjs
+      - name: QR and Code 128 encoding
+        run: node web/tests/codes.mjs
+      - name: halftones, geometry and label placement
+        run: node web/tests/render.mjs
+      - name: the page as a browser assembles it
+        run: node web/tests/wiring.mjs
+
+  python:
+    name: reference implementation and independent verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: install
+        run: pip install pillow python-barcode opencv-python-headless
+
+      - name: protocol, raster packing and flow control
+        run: python3 py/tests/test_all.py
+
+      # The vendored Code 128 table and the icons are generated, not hand-written. If a
+      # generator and its output ever disagree, one of them was edited by hand and the
+      # repository is no longer reproducible.
+      - name: generated files still match their generators
+        run: python3 tools/check-generated.py
+
+      # The half of verification that does not share any code with the implementation:
+      # OpenCV decodes the QR bitmaps, python-barcode re-derives the barcodes.
+      - name: decode what we would actually print
+        run: python3 web/tests/verify-codes.py
