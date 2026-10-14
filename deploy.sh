@@ -27,6 +27,16 @@ trap 'rm -rf "$staging"' EXIT
 for f in "${FILES[@]}"; do
   cp "$WEB_DIR/$f" "$staging/$f"
 done
+
+# Cloudflare caches .js at its edge on its own TTL and cannot be purged with this token, so
+# stamp the script URL with the file's hash. A changed file means a changed URL, which is
+# the only cache-busting that also survives the edge.
+build="$(sha256sum "$staging/funnyprint.js" | cut -c1-12)"
+sed -i "s#funnyprint\.js?v=[^\"']*#funnyprint.js?v=${build}#" "$staging/index.html" 2>/dev/null \
+  || sed -i '' "s#funnyprint\.js?v=[^\"']*#funnyprint.js?v=${build}#" "$staging/index.html"
+echo "   build stamp: ${build}"
+grep -o 'funnyprint\.js?v=[a-f0-9]*' "$staging/index.html" | sed 's/^/   /'
+
 tar czf "$staging/pocketprint-web.tar.gz" -C "$staging" "${FILES[@]}"
 echo "   $(du -h "$staging/pocketprint-web.tar.gz" | cut -f1) -> $REMOTE_TMP"
 
