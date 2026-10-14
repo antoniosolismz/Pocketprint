@@ -595,6 +595,45 @@
     return lines;
   }
 
+  /* Tone shaping before halftoning. A phone photo of a dark scene arrives with its
+   * shadows crushed together and its highlights low; a 1-bit printer has no room to
+   * recover that afterwards, so the curve has to happen first. Auto-levels is the big
+   * win for night photos, brightness/contrast are the manual trim. */
+  function applyTone(pixels, opts) {
+    const o = Object.assign({ autoLevels: false, brightness: 0, contrast: 0 }, opts || {});
+    const out = Uint8Array.from(pixels);
+    if (!out.length) return out;
+
+    if (o.autoLevels) {
+      /* Stretch between the 2nd and 98th percentile rather than min/max, so one specular
+       * highlight or a hot sensor pixel cannot flatten the whole image. */
+      const hist = new Uint32Array(256);
+      for (let i = 0; i < out.length; i++) hist[out[i]]++;
+      const clip = Math.floor(out.length * 0.02);
+      let lo = 0, hi = 255, acc = 0;
+      for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc > clip) { lo = i; break; } }
+      acc = 0;
+      for (let i = 255; i >= 0; i--) { acc += hist[i]; if (acc > clip) { hi = i; break; } }
+      const span = hi - lo;
+      if (span > 8) {
+        for (let i = 0; i < out.length; i++) {
+          out[i] = Math.max(0, Math.min(255, Math.round((out[i] - lo) * 255 / span)));
+        }
+      }
+    }
+
+    const b = o.brightness || 0;          // -100..100, added straight to the value
+    const c = (o.contrast || 0) / 100;    // -1..1, scaled about mid-grey
+    if (b !== 0 || c !== 0) {
+      const k = c >= 0 ? 1 + c * 2 : 1 + c;
+      for (let i = 0; i < out.length; i++) {
+        const v = 128 + (out[i] + b - 128) * k;
+        out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+      }
+    }
+    return out;
+  }
+
   /* pixels: Uint8Array (or array) of luminance, length w*h. 1 = black. */
   function floydSteinberg(pixels, w, h, threshold) {
     const buf = Uint8Array.from(pixels);
@@ -647,6 +686,6 @@
     crc16Xmodem, deriveCrcs, hexToBytes, bytesToHex,
     frames, alignRaster, parseNotification,
     PrinterSession, PrinterLink, BleTransport, bleAvailable,
-    floydSteinberg, thresholdBits, packBits, rasterize, wrapText
+    floydSteinberg, thresholdBits, packBits, rasterize, wrapText, applyTone
   };
 });

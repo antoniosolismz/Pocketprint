@@ -1,0 +1,61 @@
+Pocket Print — second hardware session, 2026-10-14
+Printer: LX-D02, MAC a2ff00000098, host: Chrome on Android via https://print.otelo2.com
+
+This run was the verification pass for the previous commit's fixes. Both held:
+
+  * WRAPPING — the text job grew from 67 to 71 packets because the sentence now wraps to
+    a second line, and the paper shows "This printer makes a lovely / racket." complete,
+    with the period and margin to spare. The clipped "rack" is gone.
+  * PACING — the 341-packet photo held ONCE instead of twice, backed off to 23 ms, and
+    finished after a single rewind. Same job shape as the previous session, one fewer
+    hold. The photo also came back ~2 s faster (14 s vs 15 s).
+
+New in this run: the calibration header prints "384 dots · density 3 · threshold 128", and
+the sheet is no longer dithered, so its ruler and ramp show the head rather than our halftone.
+
+What this run exposed: the night photo printed as dense black grain with the shadows
+crushed together. That is not a protocol fault — a dark source with no tone curve and a
+1-bit head has nowhere to put shadow detail. Auto-levels (2nd/98th percentile stretch) now
+runs before halftoning; measured on a synthetic night photo in the browser, black coverage
+drops from 90.3% to 77.1%.
+
+[00:56:56] ready. Connect the printer, then print.
+[00:57:00] selected "LX-D02" (id /4wU8njCa4WGqX7D9Am1Nw==)
+[00:57:00] connected (GATT)
+[00:57:01] services visible: 0000ffe6-0000-1000-8000-00805f9b34fb
+[00:57:01]   0000ffe1-0000-1000-8000-00805f9b34fb []
+[00:57:01]   0000ffe2-0000-1000-8000-00805f9b34fb []
+[00:57:01] subscribed to notifications
+[00:57:01] wired up: write 0000ffe1-0000-1000-8000-00805f9b34fb · notify 0000ffe2-0000-1000-8000-00805f9b34fb
+[00:57:01] device mac=a2ff00000098
+[00:57:01] challenge reply matched lowCrc
+[00:57:01] auth ok
+[00:57:01] ready to print
+[00:57:03]..[00:57:16] status: battery 100%  (heartbeats, printer-initiated)
+[00:57:17] job open: 160 packet(s), density 3          <- calibration page
+[00:57:19] status: battery 100%
+[00:57:21] status: battery 100%
+[00:57:22] printer finished (160 packet(s))
+[00:57:22] job closed
+[00:57:22] job closed by the printer
+[00:57:24]..[00:57:31] status: battery 99%  (heartbeats)
+[00:57:32] job open: 71 packet(s), density 3           <- text, now wrapped (+4 packets)
+[00:57:34] status: battery 99%
+[00:57:34] printer finished (71 packet(s))
+[00:57:34] job closed
+[00:57:34] job closed by the printer
+[00:57:37]..[00:58:11] status: battery 99%  (heartbeats)
+[00:58:12] job open: 341 packet(s), density 3          <- night photo
+[00:58:15] status: battery 99%
+[00:58:15] printer asked us to hold → pacing 23 ms     <- adaptive backoff engaged
+[00:58:17] status: battery 99%
+[00:58:17] lost packet 113 → rewinding to 112
+[00:58:19]..[00:58:25] status: battery 99%  (heartbeats; no second hold)
+[00:58:26] printer finished (341 packet(s))
+[00:58:27] job closed
+[00:58:27] job closed by the printer
+[00:58:29] status: battery 92%  (two photo-sized jobs cost ~7% on a not-new battery)
+[00:58:31] disconnected
+
+No undocumented 0x0C frame this session. A second sighting would be worth a snoop; one
+sighting across two sessions is still consistent with noise.

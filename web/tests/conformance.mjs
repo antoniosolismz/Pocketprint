@@ -272,6 +272,43 @@ check('an unknown 12-byte 0x0C frame is tolerated', s3.handle(weird) !== undefin
 check('and it is recorded with its bytes, not just its opcode',
   s3.log.some((l) => l.includes('0x0c') && l.includes('5a0c')), JSON.stringify(s3.log));
 
+/* --------------------------------------------------------------------- tone */
+/* The night photo came off the printer as a black mess: dark source, no tone curve, and a
+ * 1-bit head cannot recover shadow detail after halftoning. */
+console.log('\n== tone shaping ==');
+const dark = Uint8Array.from({ length: 400 }, (_, i) => 10 + (i % 40));       // only 10..49
+const stretched = FP.applyTone(dark, { autoLevels: true });
+const smin = Math.min.apply(null, stretched), smax = Math.max.apply(null, stretched);
+check('auto-levels stretches a dark range across the full scale',
+  smin <= 2 && smax >= 253, `${smin}..${smax}`);
+const outlier = Uint8Array.from({ length: 1000 }, (_, i) => (i === 500 ? 255 : 40 + (i % 20)));
+const st2 = FP.applyTone(outlier, { autoLevels: true });
+check('one specular highlight cannot flatten the stretch',
+  Math.max.apply(null, st2) >= 253 && Math.min.apply(null, st2) <= 5,
+  `${Math.min.apply(null, st2)}..${Math.max.apply(null, st2)}`);
+const flat = new Uint8Array(50).fill(200);
+check('auto-levels leaves a flat image alone',
+  FP.applyTone(flat, { autoLevels: true }).every((v) => v === 200));
+check('no options means no change',
+  FP.applyTone(Uint8Array.from([0, 77, 255])).join(',') === '0,77,255');
+check('an empty image does not crash', FP.applyTone(new Uint8Array(0), { autoLevels: true }).length === 0);
+const added = FP.applyTone(Uint8Array.from([0, 128, 255]), { brightness: 60 });
+check('brightness shifts and clamps', added.join(',') === '60,188,255', added.join(','));
+const con = FP.applyTone(Uint8Array.from([0, 100, 128, 156, 255]), { contrast: 50 });
+check('contrast pushes away from mid-grey and clamps',
+  con.join(',') === '0,72,128,184,255', con.join(','));
+
+/* the claim that matters: a dark photo prints with far less solid black */
+const dw = 120, dh = 120;
+const darkImg = new Uint8Array(dw * dh);
+for (let i = 0; i < darkImg.length; i++) darkImg[i] = 18 + ((i * 37) % 70);   // 18..87, like a night shot
+const blackBefore = FP.floydSteinberg(darkImg, dw, dh, 128).reduce((n, b) => n + b, 0);
+const blackAfter = FP.floydSteinberg(FP.applyTone(darkImg, { autoLevels: true }), dw, dh, 128)
+  .reduce((n, b) => n + b, 0);
+check('auto-levels turns a black-mush night photo into something with mid-tones',
+  blackAfter < blackBefore * 0.75,
+  `black pixels ${blackBefore}/${darkImg.length} -> ${blackAfter}/${darkImg.length}`);
+
 console.log('\n== wire trace (what goes over BLE) ==');
 transport.sent.forEach((f, i) => console.log(`  ${String(i + 1).padStart(2)}: ${String(f.length / 2).padStart(3)}B  ${f.slice(0, 54)}${f.length > 54 ? '…' : ''}`));
 
