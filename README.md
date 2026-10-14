@@ -88,6 +88,25 @@ either (it passes a width down from JavaScript per template). So:
 Ticks on the sheet are 8 dots apart, labelled every 64 dots. If the frame lands exactly
 on both edges at 384, you are set.
 
+## Why every script is stamped, and the worker revalidates
+
+Cloudflare rewrites responses to `max-age=14400` — its own four-hour TTL — regardless of the
+origin's `Cache-Control: no-cache`, and the API token for this zone cannot purge. So:
+
+- **every** local script URL carries `?v=<build hash>`, written by `deploy.sh`. A changed build
+  means a changed URL, so the page and its libraries always arrive as a matched set and no cache
+  can mix them;
+- the service worker fetches with `cache: 'no-cache'`, so an installed app revalidates instead
+  of trusting that TTL, and its cache name is stamped per build so stale caches get dropped;
+- the page checks at startup for the APIs it needs and **says so** when one is missing.
+
+That combination exists because of a real failure worth remembering: a new page ran against a
+four-hour-old `label.js`, and the label and batch previews stopped updating *with no error at
+all* — the render path threw, nothing repainted, and there was nothing on screen to explain it.
+Note the shape of it: text and image were fine, because they never touched the function that had
+been added. A silent freeze that follows a seam between two code paths is a caching or
+version-mismatch symptom, not a logic bug.
+
 ## What the paper caught
 
 Three defects that no test could have found before printing, in the order the paper revealed them:

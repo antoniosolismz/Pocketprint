@@ -36,9 +36,17 @@ console.log('\n== the page loads the way a browser would ==');
 const scriptSrcs = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]);
 check('the page declares its scripts', scriptSrcs.length >= 5, JSON.stringify(scriptSrcs));
 
+/* Every local script must carry a ?v= stamp that deploy.sh rewrites. The edge cache rewrites
+ * responses to max-age=14400 regardless of the origin's no-cache, so an unstamped URL is
+ * cached in the browser for four hours — long enough for a new page to run against an old
+ * library, which is how the label and batch previews silently stopped updating. */
+for (const src of scriptSrcs) {
+  check(`${src.split('?')[0]} carries a build stamp`, /\?v=/.test(src), src);
+}
+
 for (const src of scriptSrcs) {
   const clean = src.split('?')[0];
-  check(`${src} exists on disk`, existsSync(join(web, clean)), clean);
+  check(`${clean} exists on disk`, existsSync(join(web, clean)), clean);
 }
 
 const order = scriptSrcs.map((s) => s.split('?')[0]);
@@ -155,6 +163,24 @@ for (const need of ['index.html', 'funnyprint.js', 'codes.js', 'label.js',
 }
 check('the worker cache name is build-stamped, not fixed', /pocketprint-__BUILD__/.test(sw));
 check('the worker never fetches off-origin', /origin === self\.location\.origin/.test(sw));
+/* Without cache: 'no-cache' the worker's own fetch goes through the browser's HTTP cache, so
+ * an installed app keeps serving stale scripts even on a pull-to-refresh. */
+check('the worker revalidates instead of trusting the HTTP cache',
+  /fetch\(req, \{ cache: 'no-cache' \}\)/.test(sw));
+
+/* ------------------------------------------------- 3b. version handshake */
+console.log('\n== the page notices when its scripts are stale ==');
+check('the page lists the APIs it needs', /REQUIRED_API/.test(inline));
+check('it checks for the placement function that broke the previews',
+  /PocketLabel\.absoluteLayout'/.test(inline));
+check('it reports the mismatch instead of freezing silently',
+  /missingApi/.test(inline) && /out of step|stale/i.test(inline));
+check('deploy.sh stamps every script, not just one',
+  (() => {
+    const deploy = readFileSync(join(web, '..', 'deploy.sh'), 'utf8');
+    const stamped = [...deploy.matchAll(/for asset in ([^;]+);/g)].map((m) => m[1]).join(' ');
+    return ['funnyprint.js', 'codes.js', 'label.js'].every((f) => stamped.includes(f));
+  })());
 
 /* ------------------------------------------------- 4. the installable bits */
 console.log('\n== installable ==');

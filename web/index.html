@@ -363,10 +363,10 @@ caja-04	Estante C</textarea>
 </details>
 
 <script src="funnyprint.js?v=dev"></script>
-<script src="vendor/qrcode.js"></script>
-<script src="vendor/code128-table.js"></script>
-<script src="codes.js"></script>
-<script src="label.js"></script>
+<script src="vendor/qrcode.js?v=dev"></script>
+<script src="vendor/code128-table.js?v=dev"></script>
+<script src="codes.js?v=dev"></script>
+<script src="label.js?v=dev"></script>
 <script>
 (function () {
   'use strict';
@@ -376,6 +376,27 @@ caja-04	Estante C</textarea>
   const FP = window.FunnyPrint;
   const Codes = window.PocketCodes;
   const Label = window.PocketLabel;
+
+  /* Fail loudly if the page and its scripts are out of step.
+   *
+   * The edge cache rewrites responses to max-age=14400 regardless of the origin's no-cache,
+   * so any script whose URL never changes is cached in the browser for four hours — long
+   * enough for a new page to run against an old library. That is exactly what happened when
+   * label.js gained absoluteLayout: the label and batch previews silently stopped updating,
+   * because the render path threw and nothing repainted, while text and image were fine.
+   *
+   * deploy.sh now stamps every script URL with the build hash, which makes a mixture
+   * impossible. This check is the belt to that braces: if a mismatch ever happens again it
+   * says so, in the log and on screen, instead of freezing a preview. */
+  const REQUIRED_API = [
+    ['FunnyPrint.wrapText', FP && FP.wrapText],
+    ['FunnyPrint.processImage', FP && FP.processImage],
+    ['FunnyPrint.ditherBits', FP && FP.ditherBits],
+    ['PocketCodes.qrBitmap', Codes && Codes.qrBitmap],
+    ['PocketCodes.code128Bitmap', Codes && Codes.code128Bitmap],
+    ['PocketLabel.absoluteLayout', Label && Label.absoluteLayout],
+  ];
+  const missingApi = REQUIRED_API.filter(([, fn]) => typeof fn !== 'function').map(([name]) => name);
 
   function say(msg) {
     const stamp = new Date().toTimeString().slice(0, 8);
@@ -645,7 +666,20 @@ caja-04	Estante C</textarea>
     $('sharpLabel').textContent = $('sharpen').value;
     $('tearLabel').textContent = $('tearMm').value;
 
-    const built = compose();
+    let built;
+    try {
+      built = compose();
+    } catch (err) {
+      /* Never leave a frozen preview with no explanation: that was the whole cost of the
+       * stale-script bug. Say what failed, in the log and on screen. */
+      const msg = (err && err.message) || String(err);
+      state.bits = state.raster = null;
+      $('previewMeta').textContent = 'preview failed — see above';
+      showWarnings(['this preview could not be drawn: ' + msg]);
+      say('render error: ' + msg);
+      updatePrintEnabled();
+      return;
+    }
     if (!built.canvas) {
       state.bits = state.raster = null;
       $('previewMeta').textContent = (built.warnings || []).join(' · ') || 'nothing to preview';
@@ -1094,6 +1128,18 @@ caja-04	Estante C</textarea>
     say('Open this page in Chrome or Edge (Android, or a Chromium desktop browser) to talk to the printer.');
   } else {
     say('ready. Connect the printer, then print.');
+  }
+
+  if (missingApi.length) {
+    setStatus('scripts out of step — reload the page', 'err');
+    say('STALE SCRIPTS: this page needs ' + missingApi.join(', ') +
+        ' but the browser is running an older copy of ' +
+        (missingApi.some((m) => m.startsWith('PocketLabel')) ? 'label.js'
+          : missingApi.some((m) => m.startsWith('PocketCodes')) ? 'codes.js' : 'funnyprint.js') +
+        '. Reload (pull to refresh) and it will clear.');
+    showFailure('The page and its scripts are out of step',
+      'Missing: ' + missingApi.join(', ') + '. Your browser is holding an older script than ' +
+      'this page expects. Reload the page — a pull-to-refresh is enough.');
   }
 
   /* Offline install: the worker caches the app so it runs with no network at all. */

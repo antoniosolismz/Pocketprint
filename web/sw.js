@@ -53,7 +53,11 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith((async () => {
     try {
-      const fresh = await fetch(req);
+      /* cache: 'no-cache' means "revalidate", not "don't use the cache". Without it this
+       * fetch still passes through the browser's HTTP cache, so an installed app would keep
+       * serving a stale script for as long as the edge's TTL says (four hours) even on a
+       * pull-to-refresh. That is how a new page ended up running against an old library. */
+      const fresh = await fetch(req, { cache: 'no-cache' });
       if (fresh && fresh.ok) {
         const cache = await caches.open(CACHE);
         cache.put(req, fresh.clone());

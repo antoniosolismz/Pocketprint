@@ -42,15 +42,27 @@ for f in "${FILES[@]}"; do
   install -D -m 644 "$WEB_DIR/$f" "$staging/$f"
 done
 
-# Cloudflare caches .js at its edge on its own TTL and cannot be purged with this token, so
-# stamp the script URL with the bundle hash. A changed file means a changed URL, which is
-# the only cache-busting that also survives the edge.
-build="$(cat "$staging/funnyprint.js" "$staging/codes.js" "$staging/label.js" | sha256sum | cut -c1-12)"
-sed -i "s#funnyprint\.js?v=[^\"']*#funnyprint.js?v=${build}#" "$staging/index.html"
+# Cloudflare rewrites responses to max-age=14400 regardless of the origin's no-cache, so a
+# script whose URL never changes is cached in the browser for four hours — long enough for a
+# new page to run against an old library. That is exactly how the label previews broke: the
+# page gained a call to label.js#absoluteLayout and the browser kept serving the previous
+# label.js. Stamping every script URL with the build hash makes a mixture impossible: a
+# changed build means a changed URL, which no cache has an entry for.
+build="$(cat "$staging/funnyprint.js" "$staging/codes.js" "$staging/label.js" \
+             "$staging/vendor/qrcode.js" "$staging/vendor/code128-table.js" | sha256sum | cut -c1-12)"
+echo "   build stamp: ${build}"
+
+for asset in funnyprint.js codes.js label.js vendor/qrcode.js vendor/code128-table.js; do
+  if grep -q "src=\"${asset}?v=" "$staging/index.html"; then
+    sed -i "s#src=\"${asset}?v=[^\"]*\"#src=\"${asset}?v=${build}\"#" "$staging/index.html"
+  else
+    sed -i "s#src=\"${asset}\"#src=\"${asset}?v=${build}\"#" "$staging/index.html"
+  fi
+done
+grep -o 'src="[^"]*?v=[a-f0-9]*"' "$staging/index.html" | sed 's/^/   /'
+
 # and give the service worker a fresh cache bucket per deploy, so old ones get dropped
 sed -i "s/pocketprint-__BUILD__/pocketprint-${build}/" "$staging/sw.js"
-echo "   build stamp: ${build}"
-grep -o "funnyprint\.js?v=[a-f0-9]*" "$staging/index.html" | sed 's/^/   /'
 grep -o "pocketprint-[a-f0-9]*" "$staging/sw.js" | sed 's/^/   sw cache: /'
 
 tar czf "$staging/pocketprint-web.tar.gz" -C "$staging" "${FILES[@]}"
