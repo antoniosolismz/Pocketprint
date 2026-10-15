@@ -709,6 +709,9 @@ caja-04	Estante C</textarea>
   const previewCanvas = $('preview');
   const previewCtx = previewCanvas.getContext('2d');
   const targetWidth = () => parseInt($('widthSel').value, 10) || 384;
+  /* The rotate control is in the image pane. Normalise it here so the canvas fit and the
+   * pipeline turn always agree on which way is up. */
+  const rotateTurns = () => ((parseInt($('rotate').value, 10) || 0) % 4 + 4) % 4;
   const threshold = () => parseInt($('threshold').value, 10) || 128;
   const density = () => parseInt($('density').value, 10) || 4;
 
@@ -788,14 +791,17 @@ caja-04	Estante C</textarea>
 
   function imageCanvas() {
     if (!state.image) return null;
-    const w = targetWidth();
-    const h = Math.max(1, Math.round(state.image.height * w / state.image.width));
+    /* Fit the *rotated* image to the head, not the source image — see FP.turnFit. Scaling the
+     * source to 384 and turning the plane afterwards is the same resample and keeps the
+     * printed width at exactly the head width, where doing it the other way round would make a
+     * 90° turn 512 dots wide, which this head cannot print. */
+    const fit = FP.turnFit(state.image.width, state.image.height, rotateTurns(), targetWidth());
     const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
+    canvas.width = fit.w; canvas.height = fit.h;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, fit.w, fit.h);
     ctx.imageSmoothingEnabled = false;      // the vendor app disables filtering too
-    ctx.drawImage(state.image, 0, 0, w, h);
+    ctx.drawImage(state.image, 0, 0, fit.w, fit.h);
     return canvas;
   }
 
@@ -968,15 +974,16 @@ caja-04	Estante C</textarea>
       pixels[i] = v;
     }
 
-    let bits;
+    let bits, outW = w, outH = h;
     if (built.crisp) {
       /* Text, labels and codes are bilevel by design — never dithered. The threshold still
        * applies, because it decides how the antialiased edges binarize, which is what makes
        * text heavier or lighter on paper. */
       bits = FP.thresholdBits(pixels, w, h, threshold());
     } else {
+      const turns = rotateTurns();
       const processed = FP.processImage(pixels, w, h, {
-        rotate: parseInt($('rotate').value, 10) || 0,
+        rotate: turns,
         autoLevels: $('autoLevels').checked,
         brightness: parseInt($('brightness').value, 10) || 0,
         contrast: parseInt($('contrast').value, 10) || 0,
@@ -985,31 +992,56 @@ caja-04	Estante C</textarea>
         threshold: threshold(),
       });
       bits = processed.bits;
+      /* A turned image is a different shape than the canvas it was drawn on. Everything below —
+       * the preview, the summary, the job — has to use the dimensions the core actually
+       * produced. Reading a 384-wide preview out of a 512-wide plane is what made rotation
+       * look broken. */
+      outW = processed.w; outH = processed.h;
+      /* Only a quarter turn swaps the dimensions; a 180° keeps the shape it came in with. Check
+       * against what this particular turn should have produced, or the guard cries wolf. */
+      const shouldSwap = turns === 1 || turns === 3;
+      const expectedW = shouldSwap ? h : w;
+      const expectedH = shouldSwap ? w : h;
+      if (turns && (outW !== expectedW || outH !== expectedH)) {
+        built.warnings = (built.warnings || []).concat(
+          `rotation produced ${outW}×${outH}, expected ${expectedW}×${expectedH} — the preview may be wrong`);
+      }
     }
 
     state.bits = bits;
     state.raster = FP.packBits(bits);
-    state.w = w; state.h = h;
+    state.w = outW; state.h = outH;
     state.warnings = built.warnings || [];
+
+    /* The printer reads a fixed 48 bytes per line whatever we send it, so a raster of any other
+     * width does not error on the device — it shears diagonally and you find out on paper. The
+     * width of a job must therefore be the width of the head. */
+    const headBytes = Math.ceil(targetWidth() / 8);
+    const bytesPerLine = state.h ? state.raster.length / state.h : 0;
+    if (state.w !== targetWidth() || bytesPerLine !== headBytes) {
+      state.warnings.push(
+        `this job is ${state.w} dots wide (${bytesPerLine} bytes per line); the head is ` +
+        `${targetWidth()} dots (${headBytes}) — it would print sheared`);
+    }
     showWarnings(state.warnings);
 
-    const zoom = Math.max(1, Math.floor(Math.min(2.4, 640 / w)));
-    previewCanvas.width = w * zoom;
-    previewCanvas.height = h * zoom;
+    const zoom = Math.max(1, Math.floor(Math.min(2.4, 640 / outW)));
+    previewCanvas.width = outW * zoom;
+    previewCanvas.height = outH * zoom;
     previewCtx.fillStyle = '#fff';
     previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
     previewCtx.fillStyle = '#111';
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (bits[y * w + x]) previewCtx.fillRect(x * zoom, y * zoom, zoom, zoom);
+    for (let y = 0; y < outH; y++) {
+      for (let x = 0; x < outW; x++) {
+        if (bits[y * outW + x]) previewCtx.fillRect(x * zoom, y * zoom, zoom, zoom);
       }
     }
 
     const packets = Math.ceil(state.raster.length / FP.PAYLOAD_LEN);
     const halftone = built.crisp ? 'crisp' : $('ditherMode').value;
-    $('previewSummary').textContent = `${w}×${h} · ${mm(h)} mm · ${packets}p`;
+    $('previewSummary').textContent = `${outW}×${outH} · ${mm(outH)} mm · ${packets}p`;
     $('previewMeta').textContent =
-      `${w}×${h} dots · ${mm(h)} mm of paper · ${packets} packet(s) · density ${density()} · ${halftone}` +
+      `${outW}×${outH} dots · ${mm(outH)} mm of paper · ${packets} packet(s) · density ${density()} · ${halftone}` +
       (built.meta ? ` · ${built.meta}` : '');
     updatePrintEnabled();
   }

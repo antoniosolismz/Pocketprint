@@ -145,6 +145,27 @@ check('the text scope is separate from the label scope',
 check('text jobs read the text scope',
   /const size = style\.text\.size/.test(inline) && /style\.text\.align/.test(inline));
 
+/* ------------------------------------ 2d. a turned image keeps the head's width */
+console.log('\n== rotation lands on the head ==');
+/* A turn changes the shape of the plane, so the page has to take the dimensions back from the
+ * core. It used to keep its own and read a 512-wide plane with a 384-wide stride, which sheared
+ * both the preview and the printout. */
+check('the image canvas is fitted around the turn, not the source',
+  /FP\.turnFit\(state\.image/.test(inline));
+check('the turned dimensions come back from the core',
+  /outW = processed\.w;\s*outH = processed\.h;/.test(inline),
+  'the preview, the summary and the job must use the turned size');
+check('the page no longer trusts the pre-turn size',
+  !/state\.w = w; state\.h = h;/.test(inline));
+check('the preview loop walks the turned dimensions',
+  /for \(let y = 0; y < outH; y\+\+\)/.test(inline) && /bits\[y \* outW \+ x\]/.test(inline));
+check('a job whose width is not the head width is called out, not exported',
+  /would print sheared/.test(inline) && /bytesPerLine !== headBytes/.test(inline));
+check('the turn is normalised in one place', /const rotateTurns = /.test(inline));
+/* Only a quarter turn swaps the shape; the guard fired at 180° until it knew that. */
+check('the turn guard knows a 180 keeps the shape it came in with',
+  /shouldSwap = turns === 1 \|\| turns === 3/.test(inline));
+
 /* One table drives both label panes, so they cannot drift apart. */
 const labelRows = [...inline.matchAll(/\['(\w+)', '(select|check|number)', '(\w+)', '(\w+)'\]/g)]
   .map((m) => ({ field: m[1], kind: m[2], label: m[3], batch: m[4] }));

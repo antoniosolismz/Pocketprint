@@ -792,6 +792,30 @@
     return { pixels: out, w: nw, h: nh };
   }
 
+  /* Where a rotated image lands on the paper, as pure geometry, so the page, the CLI and the
+   * tests cannot disagree about it.
+   *
+   * The head is a fixed 384 dots wide, which makes the order of operations load-bearing.
+   * Scaling to 384 and *then* turning the plane 90° gives a 512-dot-wide raster, and a raster
+   * wider than the head cannot be printed: the printer reads 48 bytes per line, so a 64-byte
+   * line does not error, it shears diagonally. Fitting the *rotated* width to the head instead
+   * keeps the printed width exactly the head width and lets only the height grow, which the
+   * continuous paper does not mind.
+   *
+   * `w`/`h` are the canvas to draw the source into (still un-rotated). `outW`/`outH` are the
+   * dimensions once the plane has been turned, and `rotate()` must move w×h to exactly those —
+   * a test asserts that instead of trusting it.
+   */
+  function turnFit(srcW, srcH, quarterTurns, targetWidth) {
+    const turns = ((quarterTurns % 4) + 4) % 4;
+    const swap = turns === 1 || turns === 3;
+    const rotatedWidth = swap ? srcH : srcW;
+    const scale = (targetWidth || WIDTH) / Math.max(1, rotatedWidth);
+    const w = Math.max(1, Math.round(srcW * scale));
+    const h = Math.max(1, Math.round(srcH * scale));
+    return { turns, scale, w, h, outW: swap ? h : w, outH: swap ? w : h };
+  }
+
   const DITHER_MODES = ['floyd', 'atkinson', 'bayer', 'none'];
 
   /* One entry point for every halftone choice, so the UI, the CLI and the tests cannot
@@ -845,6 +869,6 @@
     frames, alignRaster, parseNotification,
     PrinterSession, PrinterLink, BleTransport, bleAvailable,
     floydSteinberg, thresholdBits, packBits, rasterize, wrapText, applyTone,
-    atkinson, bayer, unsharp, rotate, ditherBits, processImage, DITHER_MODES, BAYER_8
+    atkinson, bayer, unsharp, rotate, turnFit, ditherBits, processImage, DITHER_MODES, BAYER_8
   };
 });

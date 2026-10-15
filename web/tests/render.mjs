@@ -114,6 +114,32 @@ check('choosing a different mode changes the result',
   FP.processImage(img, 32, 16, { ditherMode: 'bayer' }).bits.join('') !==
   FP.processImage(img, 32, 16, { ditherMode: 'atkinson' }).bits.join(''));
 
+/* --------------------------------------------------- how a turn lands on paper */
+console.log('\n== rotating onto the head ==');
+/* The head is a fixed 384 dots and the printer reads 48 bytes per line, so a turned image must
+ * still come out exactly that wide. Fitting the source to 384 and *then* turning it gives a
+ * 512-wide raster, which the printer does not reject — it shears it diagonally, and you find
+ * out on paper. These pin the geometry, and the last one exists so the two halves cannot drift
+ * apart again: the page draws into turnFit's shape and the core turns it. */
+const HEAD = 384;
+const shapes = [[800, 600], [600, 800], [384, 512], [512, 384], [1024, 64], [64, 1024], [97, 61]];
+for (const [sw, sh] of shapes) {
+  for (const turns of [0, 1, 2, 3]) {
+    const fit = FP.turnFit(sw, sh, turns, HEAD);
+    const plane = new Uint8Array(fit.w * fit.h);
+    const turned = turns ? FP.rotate(plane, fit.w, fit.h, turns) : { w: fit.w, h: fit.h };
+    check(`${sw}x${sh} turned ${turns}: prints the head width in 48-byte lines`,
+      fit.outW === HEAD && Math.ceil(fit.outW / 8) === 48, `${fit.outW} dots, ${Math.ceil(fit.outW / 8)}B/line`);
+    check(`${sw}x${sh} turned ${turns}: rotate() lands on the predicted shape`,
+      turned.w === fit.outW && turned.h === fit.outH,
+      `${turned.w}x${turned.h} vs predicted ${fit.outW}x${fit.outH}`);
+  }
+}
+/* The bug this all guards against, written down as a fact: the old order cannot be printed. */
+const fittedFirst = FP.rotate(new Uint8Array(HEAD * 512), HEAD, 512, 1);
+check('turning an already-fitted 384-wide image exceeds the head (the bug)',
+  fittedFirst.w > HEAD, `${fittedFirst.w} wide`);
+
 /* --------------------------------------------------------------- units */
 console.log('\n== units on a 203 dpi head ==');
 check('48 mm is the full 384-dot width', Label.MM(48) === 384, String(Label.MM(48)));
