@@ -226,6 +226,12 @@ Nothing left the phone.</textarea>
       <details class="sub" id="imageStyleDetails" open>
         <summary>Image processing <span class="gvals" id="imageStyleVals">Atkinson · tone off</span></summary>
         <div class="gbody">
+          <label class="field"><span>Photo size — <b id="sizeLabel">48 mm</b></span>
+            <input type="range" id="photoSize" min="12" max="48" step="1" value="48">
+          </label>
+          <p class="hint" style="margin:-4px 0 10px">Longest side of the print. The paper is
+            48 mm wide, so a tall photo is scaled to this and centred instead of running down
+            the sheet. 48 mm is as large as this head goes.</p>
           <div class="grid3">
             <label class="field"><span>Rotate</span>
               <select id="rotate">
@@ -712,6 +718,8 @@ caja-04	Estante C</textarea>
   /* The rotate control is in the image pane. Normalise it here so the canvas fit and the
    * pipeline turn always agree on which way is up. */
   const rotateTurns = () => ((parseInt($('rotate').value, 10) || 0) % 4 + 4) % 4;
+  /* The size control is a length in millimetres; the head works in dots. */
+  const photoSizeDots = () => Label.MM(parseFloat($('photoSize').value) || 48);
   const threshold = () => parseInt($('threshold').value, 10) || 128;
   const density = () => parseInt($('density').value, 10) || 4;
 
@@ -791,11 +799,11 @@ caja-04	Estante C</textarea>
 
   function imageCanvas() {
     if (!state.image) return null;
-    /* Fit the *rotated* image to the head, not the source image — see FP.turnFit. Scaling the
-     * source to 384 and turning the plane afterwards is the same resample and keeps the
-     * printed width at exactly the head width, where doing it the other way round would make a
-     * 90° turn 512 dots wide, which this head cannot print. */
-    const fit = FP.turnFit(state.image.width, state.image.height, rotateTurns(), targetWidth());
+    /* Fit by the longest side, then turn — see FP.photoFit. A photograph no longer claims the
+     * full paper width regardless of its shape: a 9:16 shot at "48 mm" is 27 mm wide and 48 mm
+     * of paper instead of 85 mm, and anything smaller is centred later, on the dot plane. */
+    const fit = FP.photoFit(state.image.width, state.image.height, rotateTurns(),
+      photoSizeDots(), targetWidth());
     const canvas = document.createElement('canvas');
     canvas.width = fit.w; canvas.height = fit.h;
     const ctx = canvas.getContext('2d');
@@ -929,7 +937,8 @@ caja-04	Estante C</textarea>
     $('paperVals').textContent = `${targetWidth()} dots · ${Math.max(1, parseInt($('copiesInput').value, 10) || 1)} copy`;
     $('imageStyleVals').textContent =
       (state.mode === 'image' ? $('ditherMode').value : 'Atkinson') +
-      ($('autoLevels').checked ? ' · auto-levels' : ' · tone off');
+      ($('autoLevels').checked ? ' · auto-levels' : ' · tone off') +
+      ` · ${$('photoSize').value} mm`;
   }
 
   function render() {
@@ -938,6 +947,7 @@ caja-04	Estante C</textarea>
     $('briLabel').textContent = $('brightness').value;
     $('conLabel').textContent = $('contrast').value;
     $('sharpLabel').textContent = $('sharpen').value;
+    $('sizeLabel').textContent = `${$('photoSize').value} mm`;
     updateSummaries();
 
     let built;
@@ -1008,6 +1018,14 @@ caja-04	Estante C</textarea>
       }
     }
 
+    /* The picture's own size, before it goes on the paper — this is what the size control chose
+     * and what the readout should say. */
+    const picW = outW, picH = outH;
+    /* Centre it: the raster still has to be exactly the head width, so a smaller photo gets
+     * white margins rather than a narrower job (a narrower raster shears on the device). */
+    const centred = FP.centerBits(bits, outW, outH, targetWidth());
+    bits = centred.bits; outW = centred.w; outH = centred.h;
+
     state.bits = bits;
     state.raster = FP.packBits(bits);
     state.w = outW; state.h = outH;
@@ -1039,9 +1057,11 @@ caja-04	Estante C</textarea>
 
     const packets = Math.ceil(state.raster.length / FP.PAYLOAD_LEN);
     const halftone = built.crisp ? 'crisp' : $('ditherMode').value;
-    $('previewSummary').textContent = `${outW}×${outH} · ${mm(outH)} mm · ${packets}p`;
+    const picMm = (picW / Label.DOTS_PER_MM).toFixed(0);
+    $('previewSummary').textContent = `${picW}×${picH} · ${mm(picH)} mm · ${packets}p`;
     $('previewMeta').textContent =
-      `${outW}×${outH} dots · ${mm(outH)} mm of paper · ${packets} packet(s) · density ${density()} · ${halftone}` +
+      `${picW}×${picH} dots (${picMm}×${mm(picH)} mm)${picW < targetWidth() ? ' centred' : ''}` +
+      ` · ${mm(picH)} mm of paper · ${packets} packet(s) · density ${density()} · ${halftone}` +
       (built.meta ? ` · ${built.meta}` : '');
     updatePrintEnabled();
   }
@@ -1384,9 +1404,10 @@ caja-04	Estante C</textarea>
   /* ---------------------------------------------------------------- presets */
 
   const PRESETS = {
-    photo: { autoLevels: true, brightness: 0, contrast: 15, sharpen: 40, ditherMode: 'atkinson', threshold: 128 },
-    document: { autoLevels: true, brightness: 10, contrast: 45, sharpen: 90, ditherMode: 'none', threshold: 150 },
-    sticker: { autoLevels: true, brightness: 5, contrast: 30, sharpen: 60, ditherMode: 'bayer', threshold: 130 },
+    photo: { autoLevels: true, brightness: 0, contrast: 15, sharpen: 40, ditherMode: 'atkinson', threshold: 128, size: 48 },
+    document: { autoLevels: true, brightness: 10, contrast: 45, sharpen: 90, ditherMode: 'none', threshold: 150, size: 48 },
+    /* A sticker is small by definition: 30 mm on the longest side instead of the full 48. */
+    sticker: { autoLevels: true, brightness: 5, contrast: 30, sharpen: 60, ditherMode: 'bayer', threshold: 130, size: 30 },
   };
   function applyPreset(name) {
     const p = PRESETS[name];
@@ -1397,6 +1418,7 @@ caja-04	Estante C</textarea>
     $('sharpen').value = p.sharpen;
     $('ditherMode').value = p.ditherMode;
     $('threshold').value = p.threshold;
+    $('photoSize').value = p.size;
     say(`preset: ${name}`);
     render();
   }
@@ -1408,7 +1430,7 @@ caja-04	Estante C</textarea>
 
   /* content + global controls that simply re-render */
   ['textInput', 'fileInput', 'widthSel', 'threshold', 'invert', 'density', 'autoLevels',
-   'brightness', 'contrast', 'rotate', 'ditherMode', 'sharpen', 'copiesInput',
+   'brightness', 'contrast', 'rotate', 'photoSize', 'ditherMode', 'sharpen', 'copiesInput',
    'labelTitle', 'labelSubtitle', 'codeKind', 'codeText', 'codeEcc',
    'batchInput', 'batchCopies', 'batchStagger'].forEach((id) => {
     const el = $(id);

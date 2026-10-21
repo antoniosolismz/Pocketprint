@@ -33,8 +33,9 @@ app and then runs with no network at all.
 Four modes:
 
 - **Text** — wrapping, three sizes, three faces, left/centre/right.
-- **Image** — rotate, auto-levels, brightness, contrast, sharpen, four halftone modes, and
-  Photo / Document / Sticker presets.
+- **Image** — rotate, a **print size from 12–48 mm** (fitted by the longest side, so a tall
+  photo is centred instead of running down the sheet), auto-levels, brightness, contrast,
+  sharpen, four halftone modes, and Photo / Document / Sticker presets.
 - **Label** — a title, a subtitle, an optional QR code or Code 128 barcode, a border, and a
   tear-off gap. The preview shows the label's length in millimetres, so you know what it
   costs in paper before you print it.

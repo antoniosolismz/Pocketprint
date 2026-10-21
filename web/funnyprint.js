@@ -792,28 +792,48 @@
     return { pixels: out, w: nw, h: nh };
   }
 
-  /* Where a rotated image lands on the paper, as pure geometry, so the page, the CLI and the
-   * tests cannot disagree about it.
+  /* Geometry for putting a photograph on the paper.
    *
-   * The head is a fixed 384 dots wide, which makes the order of operations load-bearing.
-   * Scaling to 384 and *then* turning the plane 90° gives a 512-dot-wide raster, and a raster
-   * wider than the head cannot be printed: the printer reads 48 bytes per line, so a 64-byte
-   * line does not error, it shears diagonally. Fitting the *rotated* width to the head instead
-   * keeps the printed width exactly the head width and lets only the height grow, which the
-   * continuous paper does not mind.
+   *   srcW, srcH   the image's own size
+   *   turns        quarter turns applied before printing
+   *   longestDots  how long the longest printed side should be, in dots
+   *   headWidth    the print head's width (384), the hard ceiling on anything we print
    *
-   * `w`/`h` are the canvas to draw the source into (still un-rotated). `outW`/`outH` are the
-   * dimensions once the plane has been turned, and `rotate()` must move w×h to exactly those —
-   * a test asserts that instead of trusting it.
+   * Two things are load-bearing. The head is a fixed width and the printer reads a fixed number
+   * of bytes per line, so a raster of any other width is not rejected — it shears, and you find
+   * out on paper. And scaling by the *width alone* makes a tall photograph claim more paper the
+   * taller it is: a 9:16 phone shot fills 384 dots across and then asks for 85 mm of paper. So
+   * the scale is set by the longest side, which bounds the paper used as well as the width.
+   *
+   * `w`/`h` are the canvas to draw the source into (still un-rotated); `outW`/`outH` are what
+   * the picture becomes once turned, and `outW` is never more than the head.
    */
-  function turnFit(srcW, srcH, quarterTurns, targetWidth) {
-    const turns = ((quarterTurns % 4) + 4) % 4;
-    const swap = turns === 1 || turns === 3;
-    const rotatedWidth = swap ? srcH : srcW;
-    const scale = (targetWidth || WIDTH) / Math.max(1, rotatedWidth);
-    const w = Math.max(1, Math.round(srcW * scale));
-    const h = Math.max(1, Math.round(srcH * scale));
-    return { turns, scale, w, h, outW: swap ? h : w, outH: swap ? w : h };
+  function photoFit(srcW, srcH, turns, longestDots, headWidth) {
+    const t = ((turns % 4) + 4) % 4;
+    const swap = t === 1 || t === 3;
+    const head = Math.max(1, headWidth || WIDTH);
+    const rw = swap ? srcH : srcW;          // the picture's width once turned
+    const rh = swap ? srcW : srcH;
+    const longest = Math.min(head, Math.max(1, Math.round(longestDots || head)));
+    const scale = longest / Math.max(1, rw, rh);
+    const outW = Math.min(head, Math.max(1, Math.round(rw * scale)));
+    const outH = Math.max(1, Math.round(rh * scale));
+    return { turns: t, scale, w: swap ? outH : outW, h: swap ? outW : outH, outW, outH, longest };
+  }
+
+  /* Centre a narrower print on the paper. The raster has to stay exactly the head width, so the
+   * margins are added as white (0) dots instead of narrowing the job: the printer reads a fixed
+   * 48 bytes per line, so a narrower raster is not printed narrower, it is read at the wrong
+   * stride and comes out sheared. */
+  function centerBits(bits, w, h, targetWidth) {
+    const target = Math.max(1, targetWidth || WIDTH);
+    if (w >= target) return { bits, w, h };
+    const off = Math.floor((target - w) / 2);
+    const out = new Uint8Array(target * h);
+    for (let y = 0; y < h; y++) {
+      out.set(bits.subarray(y * w, (y + 1) * w), y * target + off);
+    }
+    return { bits: out, w: target, h };
   }
 
   const DITHER_MODES = ['floyd', 'atkinson', 'bayer', 'none'];
@@ -869,6 +889,7 @@
     frames, alignRaster, parseNotification,
     PrinterSession, PrinterLink, BleTransport, bleAvailable,
     floydSteinberg, thresholdBits, packBits, rasterize, wrapText, applyTone,
-    atkinson, bayer, unsharp, rotate, turnFit, ditherBits, processImage, DITHER_MODES, BAYER_8
+    atkinson, bayer, unsharp, rotate, photoFit, centerBits, ditherBits, processImage,
+    DITHER_MODES, BAYER_8
   };
 });

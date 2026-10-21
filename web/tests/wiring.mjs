@@ -128,7 +128,7 @@ if (wiringList) {
 /* Controls come in two flavours: ones that simply re-render, and the two style scopes, which
  * maintain themselves. Both must be complete or a control silently does nothing. */
 const plainControls = ['textInput', 'widthSel', 'threshold', 'invert', 'density', 'autoLevels',
-  'brightness', 'contrast', 'rotate', 'ditherMode', 'sharpen', 'copiesInput',
+  'brightness', 'contrast', 'rotate', 'photoSize', 'ditherMode', 'sharpen', 'copiesInput',
   'labelTitle', 'labelSubtitle', 'codeKind', 'codeText', 'codeEcc',
   'batchInput', 'batchCopies', 'batchStagger'];
 const wiredText = wiringList ? wiringList[1] : '';
@@ -151,7 +151,7 @@ console.log('\n== rotation lands on the head ==');
  * core. It used to keep its own and read a 512-wide plane with a 384-wide stride, which sheared
  * both the preview and the printout. */
 check('the image canvas is fitted around the turn, not the source',
-  /FP\.turnFit\(state\.image/.test(inline));
+  /FP\.photoFit\(state\.image/.test(inline));
 check('the turned dimensions come back from the core',
   /outW = processed\.w;\s*outH = processed\.h;/.test(inline),
   'the preview, the summary and the job must use the turned size');
@@ -165,6 +165,16 @@ check('the turn is normalised in one place', /const rotateTurns = /.test(inline)
 /* Only a quarter turn swaps the shape; the guard fired at 180° until it knew that. */
 check('the turn guard knows a 180 keeps the shape it came in with',
   /shouldSwap = turns === 1 \|\| turns === 3/.test(inline));
+
+console.log('\n== choosing how big a photo prints ==');
+check('the size control exists, within what the head allows',
+  /id="photoSize"[^>]*min="12"[^>]*max="48"/.test(html), 'a 12–48 mm slider');
+check('the picture is fitted by its longest side', /FP\.photoFit\(state\.image/.test(inline));
+check('a smaller print is centred instead of narrowing the raster',
+  /FP\.centerBits\(bits/.test(inline));
+check('the readout reports the picture, not the padded raster', /const picW = outW/.test(inline));
+check('the sticker preset starts small', /sticker: \{[^}]*size: 30/.test(inline));
+check('the size slider shows its value', /sizeLabel/.test(html) && /\$\('sizeLabel'\)/.test(inline));
 
 /* One table drives both label panes, so they cannot drift apart. */
 const labelRows = [...inline.matchAll(/\['(\w+)', '(select|check|number)', '(\w+)', '(\w+)'\]/g)]

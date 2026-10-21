@@ -114,27 +114,54 @@ check('choosing a different mode changes the result',
   FP.processImage(img, 32, 16, { ditherMode: 'bayer' }).bits.join('') !==
   FP.processImage(img, 32, 16, { ditherMode: 'atkinson' }).bits.join(''));
 
-/* --------------------------------------------------- how a turn lands on paper */
-console.log('\n== rotating onto the head ==');
-/* The head is a fixed 384 dots and the printer reads 48 bytes per line, so a turned image must
- * still come out exactly that wide. Fitting the source to 384 and *then* turning it gives a
- * 512-wide raster, which the printer does not reject — it shears it diagonally, and you find
- * out on paper. These pin the geometry, and the last one exists so the two halves cannot drift
- * apart again: the page draws into turnFit's shape and the core turns it. */
+/* --------------------------------------------------- photographs on the paper */
+console.log('\n== photographs on the paper ==');
+/* Two rules the printer enforces whether or not we agree with them: the raster has to be exactly
+ * the head width (the device reads a fixed 48 bytes per line and shears anything else), and the
+ * paper used should be an amount a human chose rather than a consequence of the photo's aspect
+ * ratio. Fitting by the longest side gives both. */
 const HEAD = 384;
-const shapes = [[800, 600], [600, 800], [384, 512], [512, 384], [1024, 64], [64, 1024], [97, 61]];
+const shapes = [[800, 600], [1080, 1920], [512, 384], [97, 61]];
 for (const [sw, sh] of shapes) {
   for (const turns of [0, 1, 2, 3]) {
-    const fit = FP.turnFit(sw, sh, turns, HEAD);
-    const plane = new Uint8Array(fit.w * fit.h);
-    const turned = turns ? FP.rotate(plane, fit.w, fit.h, turns) : { w: fit.w, h: fit.h };
-    check(`${sw}x${sh} turned ${turns}: prints the head width in 48-byte lines`,
-      fit.outW === HEAD && Math.ceil(fit.outW / 8) === 48, `${fit.outW} dots, ${Math.ceil(fit.outW / 8)}B/line`);
-    check(`${sw}x${sh} turned ${turns}: rotate() lands on the predicted shape`,
-      turned.w === fit.outW && turned.h === fit.outH,
-      `${turned.w}x${turned.h} vs predicted ${fit.outW}x${fit.outH}`);
+    for (const sizeMm of [48, 24]) {
+      const want = Math.min(HEAD, Label.MM(sizeMm));
+      const fit = FP.photoFit(sw, sh, turns, Label.MM(sizeMm), HEAD);
+      const plane = new Uint8Array(fit.w * fit.h);
+      const turned = turns ? FP.rotate(plane, fit.w, fit.h, turns) : { w: fit.w, h: fit.h };
+      check(`${sw}x${sh} ${turns * 90}° at ${sizeMm}mm: longest side is the size asked for`,
+        Math.max(fit.outW, fit.outH) === want && fit.outW <= HEAD,
+        `${fit.outW}x${fit.outH} vs ${want}, head ${HEAD}`);
+      check(`${sw}x${sh} ${turns * 90}° at ${sizeMm}mm: rotate() lands on the predicted shape`,
+        turned.w === fit.outW && turned.h === fit.outH,
+        `${turned.w}x${turned.h} vs predicted ${fit.outW}x${fit.outH}`);
+    }
   }
 }
+/* The complaint that started this: a tall phone photo used 85 mm of paper because the app always
+ * filled the width. The longest side is the fix, and it is bounded. */
+const phone = FP.photoFit(1080, 1920, 0, Label.MM(48), HEAD);
+check('a 9:16 photo uses no more paper than the size asked for',
+  phone.outH <= Label.MM(48), `${phone.outH} dots = ${(phone.outH / Label.DOTS_PER_MM).toFixed(0)} mm`);
+check('filling the width instead would have taken far more paper',
+  Math.round(HEAD * 1920 / 1080) > Label.MM(48) * 1.5,
+  `${Math.round(HEAD * 1920 / 1080)} dots = ${(HEAD * 1920 / 1080 / Label.DOTS_PER_MM).toFixed(0)} mm`);
+
+console.log('\n== centring a smaller print ==');
+const pic = new Uint8Array(200 * 100).fill(1);
+const padded = FP.centerBits(pic, 200, 100, HEAD);
+check('a narrow print is padded out to the head width',
+  padded.w === HEAD && padded.h === 100, `${padded.w}x${padded.h}`);
+check('the margins are white on both sides',
+  padded.bits[0] === 0 && padded.bits[HEAD - 1] === 0, `${padded.bits[0]},${padded.bits[HEAD - 1]}`);
+check('the picture sits in the middle',
+  padded.bits[50 * HEAD + 92] === 1 && padded.bits[50 * HEAD + 91] === 0, 'left margin is 92 dots');
+check('nothing is clipped or duplicated',
+  padded.bits.reduce((a, b) => a + b, 0) === 200 * 100,
+  String(padded.bits.reduce((a, b) => a + b, 0)));
+check('the padded raster is still 48 bytes per line',
+  FP.packBits(padded.bits).length === 100 * 48, String(FP.packBits(padded.bits).length));
+check('a full-width print is passed through untouched', FP.centerBits(pic, HEAD, 100, HEAD).bits === pic);
 /* The bug this all guards against, written down as a fact: the old order cannot be printed. */
 const fittedFirst = FP.rotate(new Uint8Array(HEAD * 512), HEAD, 512, 1);
 check('turning an already-fitted 384-wide image exceeds the head (the bug)',
